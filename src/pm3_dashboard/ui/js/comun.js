@@ -172,7 +172,7 @@ function htmlFichaTarjeta(t) {
             <div class="pt-3 space-y-2">
                 ${htmlComando('Comando de clonado', d.comando_clonado)}
                 ${htmlComando('Comando de emulación', d.comando_emulacion)}
-                <p class="text-[11px] text-slate-500">Generados a partir del tipo y el UID. La emulación desde la app llegará en una próxima versión.</p>
+                <p class="text-[11px] text-slate-500">Generados a partir del tipo y el UID. Para emular, usa la sección «Clonado y emulación».</p>
             </div>`;
     } else {
         html += `<p class="mt-3 text-xs text-amber-200 bg-amber-950/30 border border-amber-500/30 rounded-lg p-2">

@@ -278,17 +278,108 @@
                 </div>
             </section>
 
-            <!-- ============ SECCIÓN GENÉRICA "PRÓXIMAMENTE" ============ -->
-            <section id="seccion-proximamente" data-seccion class="hidden max-w-3xl mx-auto mt-16">
-                <div class="bg-cyber-900 border border-slate-800 rounded-2xl p-10 text-center space-y-4">
-                    <div class="relative inline-flex items-center justify-center w-16 h-16">
-                        <span class="rf-wave absolute inset-0 rounded-full border-2 border-cyan-500/40"></span>
-                        <span class="relative w-16 h-16 rounded-full bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400 font-mono font-bold">…</span>
+            <!-- ============ SECCIÓN: ANTENAS ============ -->
+            <section id="seccion-antenas" data-seccion class="hidden max-w-4xl mx-auto space-y-6">
+                <div class="flex items-end justify-between gap-4">
+                    <div>
+                        <span class="text-xs font-mono uppercase tracking-wider text-cyan-400">hw tune</span>
+                        <h2 class="text-2xl font-bold text-white mt-1">Antenas</h2>
+                        <p class="text-sm text-slate-400 mt-1">Mide el voltaje y la sintonía de las bobinas LF (125 kHz) y HF (13.56 MHz).</p>
                     </div>
-                    <h2 id="proximamente-titulo" class="text-xl font-bold text-white">Sección</h2>
-                    <p id="proximamente-descripcion" class="text-sm text-slate-400"></p>
-                    <span class="inline-block px-3 py-1 rounded-lg bg-slate-800 text-xs font-mono text-slate-300">PRÓXIMAMENTE</span>
+                    <button id="btn-medir-antenas" class="px-5 py-3 bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-700 disabled:text-slate-400 disabled:cursor-wait text-white font-semibold rounded-xl flex items-center gap-2 transition shrink-0">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                        <span id="btn-medir-antenas-texto">Medir ahora</span>
+                    </button>
                 </div>
+
+                <p id="antenas-error-seccion" class="hidden text-sm text-rose-300 bg-rose-950/30 border border-rose-500/30 rounded-2xl p-4 break-words"></p>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    <div class="bg-cyber-900 border border-slate-800 rounded-2xl p-5"><div id="antenas-sec-lf"></div></div>
+                    <div class="bg-cyber-900 border border-slate-800 rounded-2xl p-5"><div id="antenas-sec-hf"></div></div>
+                </div>
+
+                <div class="bg-cyber-900 border border-slate-800 rounded-2xl p-5">
+                    <h3 class="text-base font-bold text-white mb-3">Mediciones anteriores</h3>
+                    <table class="w-full text-sm">
+                        <thead class="text-xs font-mono uppercase text-slate-400">
+                            <tr>
+                                <th class="text-left py-2">Fecha</th>
+                                <th class="text-right py-2">LF</th>
+                                <th class="text-right py-2">HF</th>
+                            </tr>
+                        </thead>
+                        <tbody id="antenas-historial" class="divide-y divide-slate-800"></tbody>
+                    </table>
+                    <div id="antenas-historial-vacio" class="hidden py-6 text-center text-sm text-slate-500">Sin mediciones todavía.</div>
+                </div>
+            </section>
+
+            <!-- ============ SECCIÓN: CLONADO Y EMULACIÓN ============ -->
+            <section id="seccion-clonado" data-seccion class="hidden max-w-4xl mx-auto space-y-6">
+                <div>
+                    <span class="text-xs font-mono uppercase tracking-wider text-cyan-400">sim · cload</span>
+                    <h2 class="text-2xl font-bold text-white mt-1">Clonado y emulación</h2>
+                    <p class="text-sm text-slate-400 mt-1">Trabaja sobre una tarjeta guardada en la base de datos.</p>
+                </div>
+
+                <div class="bg-cyber-900 border border-slate-800 rounded-2xl p-5 space-y-3">
+                    <label class="block space-y-1">
+                        <span class="text-xs font-mono text-slate-400">Tarjeta</span>
+                        <select id="clonado-tarjeta" class="w-full bg-cyber-950 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-cyan-500">
+                            <option value="">— elige una tarjeta guardada —</option>
+                        </select>
+                    </label>
+                    <p id="clonado-vacio" class="hidden text-sm text-slate-500">No hay tarjetas guardadas. Lee una en la sección Lectura.</p>
+                </div>
+
+                <div id="clonado-detalle" class="hidden grid grid-cols-1 md:grid-cols-2 gap-5">
+                    <!-- Emulación -->
+                    <div class="bg-cyber-900 border border-slate-800 rounded-2xl p-5 space-y-3">
+                        <h3 class="text-base font-bold text-white">Emulación</h3>
+                        <div id="emu-comando" class="text-xs"></div>
+                        <div class="flex items-center gap-2">
+                            <button id="btn-emular" class="px-4 py-2 bg-violet-600 hover:bg-violet-500 disabled:bg-slate-700 disabled:text-slate-400 text-white text-sm font-semibold rounded-xl transition">Emular</button>
+                            <button id="btn-detener-emu" class="hidden px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white text-sm font-semibold rounded-xl transition">Detener</button>
+                            <span id="emu-estado" class="hidden items-center gap-1.5 text-xs font-mono text-violet-300"><span class="w-2 h-2 rounded-full bg-violet-400 animate-pulse"></span>emulando</span>
+                        </div>
+                        <div id="emu-confirmacion"></div>
+                        <pre id="emu-salida" class="hidden salida-cliente bg-cyber-950 border border-slate-800 rounded-lg p-3 text-[11px] font-mono text-slate-300 max-h-48 overflow-y-auto"></pre>
+                    </div>
+
+                    <!-- Clonado -->
+                    <div class="bg-cyber-900 border border-slate-800 rounded-2xl p-5 space-y-3">
+                        <h3 class="text-base font-bold text-white">Clonado</h3>
+                        <p id="clonado-ayuda" class="text-sm text-slate-400"></p>
+                        <button id="btn-ir-clonar" class="px-4 py-2 bg-rose-600 hover:bg-rose-500 disabled:bg-slate-700 disabled:text-slate-400 text-white text-sm font-semibold rounded-xl transition">Abrir ficha para clonar</button>
+                    </div>
+                </div>
+
+                <p class="text-[11px] text-amber-300/80 border-t border-slate-800 pt-3">Emula y clona solo tarjetas propias o con autorización expresa de su titular.</p>
+            </section>
+
+            <!-- ============ SECCIÓN: TERMINAL ============ -->
+            <section id="seccion-terminal" data-seccion class="hidden max-w-5xl mx-auto space-y-4">
+                <div>
+                    <span class="text-xs font-mono uppercase tracking-wider text-cyan-400">cliente de Iceman</span>
+                    <h2 class="text-2xl font-bold text-white mt-1">Terminal</h2>
+                    <p class="text-sm text-slate-400 mt-1">Envía comandos al cliente. Pensada para <strong class="text-slate-200">lectura y diagnóstico</strong>; cualquier otro comando pide confirmación.</p>
+                </div>
+
+                <div id="terminal-salida" class="bg-cyber-950 border border-slate-800 rounded-2xl p-4 h-80 overflow-y-auto font-mono text-xs text-slate-300 space-y-2">
+                    <div class="text-slate-500">Escribe un comando, por ejemplo <code class="text-cyan-300">hw version</code> o <code class="text-cyan-300">hf search</code>. Usa ↑/↓ para el historial.</div>
+                </div>
+
+                <div id="terminal-confirmacion"></div>
+
+                <form id="terminal-form" class="flex items-center gap-2">
+                    <span class="font-mono text-cyan-400 text-sm">pm3 &gt;</span>
+                    <input id="terminal-entrada" type="text" autocomplete="off" spellcheck="false" placeholder="hw version"
+                        class="flex-1 bg-cyber-900 border border-slate-700 rounded-xl px-3 py-2.5 text-sm font-mono text-slate-200 focus:outline-none focus:border-cyan-500">
+                    <button id="btn-terminal" type="submit" class="px-4 py-2.5 bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-700 disabled:text-slate-400 text-white text-sm font-semibold rounded-xl transition">Enviar</button>
+                </form>
+
+                <p class="text-[11px] text-amber-300/80">Usa la terminal solo con tarjetas propias o con autorización. Los comandos de escritura (clonar, borrar, escribir bloques) piden confirmación antes de ejecutarse.</p>
             </section>
         </main>
     </div>
@@ -305,9 +396,12 @@
     <!-- Scripts normales (no módulos ES) en orden: comun.js primero, app.js al final. -->
     <script src="js/comun.js"></script>
     <script src="js/inicio.js"></script>
+    <script src="js/antenas.js"></script>
     <script src="js/lectura.js"></script>
     <script src="js/volcado.js"></script>
     <script src="js/base_datos.js"></script>
+    <script src="js/emulacion.js"></script>
+    <script src="js/terminal.js"></script>
     <script src="js/app.js"></script>
 </body>
 </html>

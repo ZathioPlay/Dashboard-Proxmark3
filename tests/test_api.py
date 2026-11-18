@@ -321,6 +321,11 @@ def test_solo_se_exponen_los_metodos_previstos(entorno: Entorno) -> None:
         "recuperar_claves",
         "obtener_volcado",
         "clonar_tarjeta",
+        "listar_mediciones",
+        "emular_tarjeta",
+        "detener_emulacion",
+        "estado_emulacion",
+        "ejecutar_terminal",
     }
 
 
@@ -751,3 +756,123 @@ def test_un_uid_manipulado_no_escribe_fuera_de_dumps(entorno: Entorno, tmp_path:
     # No se ha creado ningún fichero fuera de dumps.
     assert list(tmp_path.glob("**/evil*")) == []
     assert not (tmp_path.parent / "evil").exists()
+
+
+# ================================================================ antenas (histórico)
+
+def test_listar_mediciones(entorno: Entorno) -> None:
+    entorno.lanzador.responder("hw tune", stdout=_muestra("hw_tune_ok"))
+    entorno.api.medir_antenas()
+    entorno.api.medir_antenas()
+
+    resultado = entorno.api.listar_mediciones()
+
+    assert resultado["ok"]
+    assert len(resultado["mediciones"]) == 2
+    assert resultado["mediciones"][0]["lf"]["voltios"] == 44.28
+    json.dumps(resultado)
+
+
+def test_listar_mediciones_vacio(entorno: Entorno) -> None:
+    assert entorno.api.listar_mediciones() == {"ok": True, "mediciones": []}
+
+
+# ================================================================ emulación
+
+def test_emular_usa_el_comando_de_recetas(entorno: Entorno) -> None:
+    id_tarjeta = _tarjeta_hf(entorno)
+
+    resultado = entorno.api.emular_tarjeta(id_tarjeta)
+
+    assert resultado["ok"]
+    assert resultado["estado"]["activa"] is True
+    # El comando lo genera recetas.py a partir del tipo y el UID.
+    assert "hf mf sim --1k -u 5A3E7C1B" in entorno.lanzador.comandos
+    assert entorno.descripciones()[0] == "Emulando «Oficina» (MIFARE Classic 1K)"
+    json.dumps(resultado)
+
+    entorno.api.detener_emulacion()
+
+
+def test_estado_y_detener_emulacion(entorno: Entorno) -> None:
+    id_tarjeta = tarjetas.insertar_tarjeta(entorno.bd, NuevaTarjeta(nombre="Llavero", banda="lf", tipo="EM410x", uid="0F0368568B"))
+    entorno.api.emular_tarjeta(id_tarjeta)
+
+    assert entorno.api.estado_emulacion()["estado"]["activa"] is True
+
+    detener = entorno.api.detener_emulacion()
+
+    assert detener["ok"]
+    assert detener["estado"]["activa"] is False
+    assert entorno.api.estado_emulacion()["estado"]["activa"] is False
+    assert "hf break" not in entorno.lanzador.comandos  # se envía 'hw break', no otra cosa
+    assert "hw break" in entorno.lanzador.comandos
+
+
+def test_emular_tarjeta_inexistente(entorno: Entorno) -> None:
+    resultado = entorno.api.emular_tarjeta(9999)
+
+    assert not resultado["ok"]
+    assert entorno.lanzador.llamadas == []
+
+
+# ================================================================ terminal
+
+def test_terminal_ejecuta_comandos_de_lectura_directos(entorno: Entorno) -> None:
+    entorno.lanzador.responder("hf search", stdout=_muestra("hf_search_1k"))
+
+    resultado = entorno.api.ejecutar_terminal("hf search")
+
+    assert resultado["ok"]
+    assert "UID" in resultado["salida"]
+    assert entorno.lanzador.comandos == ["hf search"]
+
+
+def test_terminal_pide_confirmacion_para_escritura(entorno: Entorno) -> None:
+    resultado = entorno.api.ejecutar_terminal("lf t55xx wipe")
+
+    assert not resultado["ok"]
+    assert resultado["requiere_confirmacion"] is True
+    assert resultado["comando"] == "lf t55xx wipe"
+    assert entorno.lanzador.llamadas == []  # no se ejecutó nada
+
+
+def test_terminal_ejecuta_escritura_tras_confirmar(entorno: Entorno) -> None:
+    entorno.lanzador.responder("lf t55xx wipe", stdout="[+] ok")
+
+    resultado = entorno.api.ejecutar_terminal("lf t55xx wipe", confirmado=True)
+
+    assert resultado["ok"]
+    assert entorno.lanzador.comandos == ["lf t55xx wipe"]
+
+
+def test_terminal_un_comando_de_escritura_inventado_tambien_pide_confirmacion(entorno: Entorno) -> None:
+    # No está en ninguna lista: por defecto se pide confirmación, nunca se ejecuta directo.
+    resultado = entorno.api.ejecutar_terminal("zonk frobnicate --tarjeta")
+
+    assert not resultado["ok"]
+    assert resultado["requiere_confirmacion"] is True
+    assert entorno.lanzador.llamadas == []
+
+
+def test_terminal_deriva_sim_a_la_seccion_de_emulacion(entorno: Entorno) -> None:
+    resultado = entorno.api.ejecutar_terminal("hf mf sim --1k -u 5A3E7C1B")
+
+    assert not resultado["ok"]
+    assert resultado["es_emulacion"] is True
+    assert entorno.lanzador.llamadas == []
+
+
+def test_terminal_comando_vacio(entorno: Entorno) -> None:
+    resultado = entorno.api.ejecutar_terminal("   ")
+
+    assert not resultado["ok"]
+    assert "Escribe un comando" in resultado["error"]
+
+
+def test_terminal_no_hay_forma_de_saltarse_la_confirmacion(entorno: Entorno) -> None:
+    """Aunque la interfaz mintiera, el comando de escritura no corre sin confirmado=True."""
+    for comando in ["hf mf cload -f x.bin", "hf mf wrbl --blk 0 -d 00", "lf em 410x clone --id 0F0368568B"]:
+        resultado = entorno.api.ejecutar_terminal(comando, confirmado=False)
+        assert resultado.get("requiere_confirmacion") is True, comando
+    assert entorno.lanzador.llamadas == []

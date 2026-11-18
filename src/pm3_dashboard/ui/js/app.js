@@ -4,18 +4,20 @@
 // ==================== SECCIONES DEL MENÚ ====================
 
 const SECCIONES = [
-    { id: 'inicio',   titulo: 'Inicio',               descripcion: '' },
-    { id: 'antenas',  titulo: 'Antenas',              descripcion: 'Medición de las antenas LF y HF con hw tune.' },
-    { id: 'lectura',  titulo: 'Lectura',              descripcion: '' },
-    { id: 'clonado',  titulo: 'Clonado y emulación',  descripcion: 'Para clonar una tarjeta HF, ábrela en Base de datos, lee sus bloques y pulsa «Clonar». La emulación llegará en una próxima versión.' },
-    { id: 'base',     titulo: 'Base de datos',        descripcion: '' },
-    { id: 'terminal', titulo: 'Terminal',             descripcion: 'Consola para enviar comandos al cliente de Iceman.' },
+    { id: 'inicio',   titulo: 'Inicio' },
+    { id: 'antenas',  titulo: 'Antenas' },
+    { id: 'lectura',  titulo: 'Lectura' },
+    { id: 'clonado',  titulo: 'Clonado y emulación' },
+    { id: 'base',     titulo: 'Base de datos' },
+    { id: 'terminal', titulo: 'Terminal' },
 ];
 
 // Qué hacer al entrar en cada sección (refrescar sus datos).
 const AL_ENTRAR = {
     inicio: () => cargarResumen(),
+    antenas: () => cargarAntenas(),
     base: () => cargarTarjetas(),
+    clonado: () => cargarSeccionClonado(),
 };
 
 const CLASE_NAV_ACTIVO = 'flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition bg-cyan-600/15 text-cyan-300 border border-cyan-500/30';
@@ -35,8 +37,6 @@ function crearMenu() {
 }
 
 function mostrarSeccion(id) {
-    const seccion = SECCIONES.find((s) => s.id === id);
-
     SECCIONES.forEach((s) => {
         const boton = $(`nav-${s.id}`);
         const activo = s.id === id;
@@ -45,17 +45,9 @@ function mostrarSeccion(id) {
     });
 
     document.querySelectorAll('[data-seccion]').forEach((el) => el.classList.add('hidden'));
-
-    const propia = $(`seccion-${id}`);
-    if (propia) {
-        propia.classList.remove('hidden');
-        if (apiLista && AL_ENTRAR[id]) {
-            AL_ENTRAR[id]();
-        }
-    } else {
-        ponerTexto('proximamente-titulo', seccion.titulo);
-        ponerTexto('proximamente-descripcion', seccion.descripcion);
-        mostrar('seccion-proximamente', true);
+    $(`seccion-${id}`).classList.remove('hidden');
+    if (apiLista && AL_ENTRAR[id]) {
+        AL_ENTRAR[id]();
     }
 }
 
@@ -81,8 +73,11 @@ function alEstarListaLaApi() {
 document.addEventListener('DOMContentLoaded', () => {
     crearMenu();
     iniciarSeccionInicio();
+    iniciarSeccionAntenas();
     iniciarSeccionLectura();
     iniciarSeccionBaseDatos();
+    iniciarSeccionClonado();
+    iniciarSeccionTerminal();
     mostrarSeccion('inicio');
     alEstarListaLaApi();
 

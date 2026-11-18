@@ -64,14 +64,16 @@ pm3-dashboard/
    última medición de antenas, nº de tarjetas por banda, actividad reciente.
 4. **Secciones**: antenas (`hw tune`), lectura, base de datos de tarjetas
    (CRUD, búsqueda, exportar/importar JSON), clonado y emulación, terminal.
-   Hecho: lectura, base de datos, volcado HF (`hf mf dump` / `hf mfu dump`),
-   recuperación de claves (`hf mf autopwn`) y clonado real de MIFARE Classic.
+   Hecho: las seis secciones del menú funcionan — inicio, antenas (`hw tune`
+   con histórico), lectura, base de datos (CRUD, búsqueda, exportar/importar),
+   clonado y emulación (volcado HF `hf mf dump` / `hf mfu dump`, recuperación de
+   claves `hf mf autopwn`, clonado real de MIFARE Classic y emulación `sim`) y
+   terminal (lista blanca de comandos de lectura; el resto pide confirmación).
    Pendiente para esta fase:
    - Lectura de **HID Prox** en LF (`lf hid clone/sim -r <raw>`); en la fase 2
      solo se reconoce EM410x, igual que el prototipo.
    - Clonado de **Ultralight / NTAG** y de volcados **incompletos** (ahora solo
      se clona MIFARE Classic con el volcado completo).
-   - **Emulación** desde la interfaz.
    - Progreso en vivo y botón de **cancelar** en `autopwn` (ahora es una
      llamada bloqueante con *timeout* amplio).
 5. **Distribución**: Tailwind local, PyInstaller, instalador con Inno Setup.

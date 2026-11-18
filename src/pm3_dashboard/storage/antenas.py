@@ -40,13 +40,7 @@ def _estado(texto: str) -> EstadoAntena:
         return EstadoAntena.SIN_DATOS
 
 
-def ultima_medicion(bd: BaseDatos) -> MedicionGuardada | None:
-    with bd.conexion() as con:
-        fila = con.execute(
-            "SELECT * FROM mediciones_antenas ORDER BY fecha DESC, id DESC LIMIT 1"
-        ).fetchone()
-    if fila is None:
-        return None
+def _desde_fila(fila) -> MedicionGuardada:  # noqa: ANN001 (sqlite3.Row)
     return MedicionGuardada(
         id=fila["id"],
         fecha=fila["fecha"],
@@ -55,3 +49,20 @@ def ultima_medicion(bd: BaseDatos) -> MedicionGuardada | None:
             hf=MedicionAntena(voltios=fila["hf_voltios"], estado=_estado(fila["hf_estado"])),
         ),
     )
+
+
+def ultima_medicion(bd: BaseDatos) -> MedicionGuardada | None:
+    with bd.conexion() as con:
+        fila = con.execute(
+            "SELECT * FROM mediciones_antenas ORDER BY fecha DESC, id DESC LIMIT 1"
+        ).fetchone()
+    return _desde_fila(fila) if fila else None
+
+
+def historial(bd: BaseDatos, limite: int = 10) -> list[MedicionGuardada]:
+    """Mediciones guardadas, de la más reciente a la más antigua."""
+    with bd.conexion() as con:
+        filas = con.execute(
+            "SELECT * FROM mediciones_antenas ORDER BY fecha DESC, id DESC LIMIT ?", (limite,)
+        ).fetchall()
+    return [_desde_fila(fila) for fila in filas]

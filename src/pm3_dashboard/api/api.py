@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import threading
 from collections.abc import Callable
 from datetime import date
@@ -34,6 +35,47 @@ logger = logging.getLogger(__name__)
 EVENTOS_RECIENTES = 8
 MENSAJES_OCUPADA = (MSG_OCUPADA, MSG_EMULACION)
 TIMEOUT_CLONADO = 120.0
+TIMEOUT_TERMINAL = 30.0
+MAX_MEDICIONES = 50
+
+# --- Terminal: lista blanca de comandos de lectura/diagnóstico ---------------
+# Política por defecto: solo lo que está aquí se ejecuta directo; CUALQUIER otro
+# comando pide confirmación (así un comando de escritura nuevo o desconocido
+# nunca corre sin confirmar). Ampliar estas listas es seguro.
+#
+# Un comando es de lectura si empieza por uno de estos prefijos...
+PREFIJOS_LECTURA: tuple[str, ...] = (
+    "hw version", "hw status", "hw tune", "hw ping", "hw dbg", "hw detectreader",
+    "hf search", "lf search", "data", "help", "prefs show",
+    "hf mf info", "hf mf chk", "hf mf fchk", "hf mf nested", "hf mf hardnested",
+    "hf mf staticnested", "hf mf autopwn", "hf mfu info", "hf 14a info", "hf 14a list",
+    "hf 14a reader", "hf 15 info", "hf iclass info", "lf t55xx detect", "lf t55xx config",
+    "lf em 410x reader", "lf hid reader", "lf indala reader", "lf awid reader",
+)
+# ...o su última palabra es una de estas (p. ej. "... info", "... reader").
+SUFIJOS_LECTURA: frozenset[str] = frozenset({
+    "info", "reader", "read", "rdbl", "rdsc", "detect", "dump", "list",
+    "search", "help", "tune", "version", "status", "trace", "view", "config",
+})
+
+
+def _es_comando_lectura(comando_normalizado: str) -> bool:
+    if comando_normalizado.split()[-1] in SUFIJOS_LECTURA:
+        return True
+    return any(
+        comando_normalizado == prefijo or comando_normalizado.startswith(prefijo + " ")
+        for prefijo in PREFIJOS_LECTURA
+    )
+
+
+def _clasificar_terminal(comando: str) -> str:
+    """'vacio' | 'emulacion' | 'lectura' | 'confirmar'."""
+    normalizado = " ".join(comando.split()).lower()
+    if not normalizado:
+        return "vacio"
+    if re.search(r"\bsim\b", normalizado):
+        return "emulacion"  # la emulación se hace en su sección, no en la terminal
+    return "lectura" if _es_comando_lectura(normalizado) else "confirmar"
 
 
 def _bytes_volcado(volcado: Volcado) -> bytes:
@@ -169,6 +211,29 @@ class Api:
     def clonar_tarjeta(self, id_tarjeta: int) -> dict[str, Any]:
         """Clona a una tarjeta mágica usando el volcado guardado. ESCRITURA (se confirma en la interfaz)."""
         return self._seguro(lambda: self._clonar_tarjeta(id_tarjeta))
+
+    # ================================================================ antenas
+    def listar_mediciones(self, limite: int = 10) -> dict[str, Any]:
+        """Histórico de mediciones de antenas (de la base de datos)."""
+        return self._seguro(lambda: self._listar_mediciones(limite))
+
+    # ================================================================ emulación
+    def emular_tarjeta(self, id_tarjeta: int) -> dict[str, Any]:
+        """Emula una tarjeta guardada con el comando generado por recetas.py. ESCRITURA/RF (se confirma en la interfaz)."""
+        return self._seguro(lambda: self._emular_tarjeta(id_tarjeta))
+
+    def detener_emulacion(self) -> dict[str, Any]:
+        return self._seguro(self._detener_emulacion)
+
+    def estado_emulacion(self) -> dict[str, Any]:
+        """Estado y salida de la emulación en curso (para que la interfaz sondee)."""
+        return self._seguro(self._estado_emulacion)
+
+    # ================================================================ terminal
+    def ejecutar_terminal(self, comando: str, confirmado: bool = False) -> dict[str, Any]:
+        """Ejecuta un comando del cliente. Solo los de lectura/diagnóstico corren directos;
+        cualquier otro pide confirmación (comprobado aquí, no solo en la interfaz)."""
+        return self._seguro(lambda: self._ejecutar_terminal(comando, confirmado))
 
     # ================================================================ implementación
     def _seguro(self, operacion: Callable[[], dict[str, Any]]) -> dict[str, Any]:
@@ -424,6 +489,62 @@ class Api:
             self._bd, TipoActividad.CLONADO, f"Clonada «{tarjeta.nombre}» ({tarjeta.tipo}, {tarjeta.uid})"
         )
         return {"ok": True, "salida": res.salida}
+
+    # ---------------------------------------------------------------- antenas
+    def _listar_mediciones(self, limite: object) -> dict[str, Any]:
+        n = max(1, min(_entero(limite, "limite"), MAX_MEDICIONES))
+        return {
+            "ok": True,
+            "mediciones": [conversion.medicion(m) for m in antenas.historial(self._bd, n)],
+        }
+
+    # ---------------------------------------------------------------- emulación
+    def _emular_tarjeta(self, id_tarjeta: object) -> dict[str, Any]:
+        tarjeta = tarjetas.obtener(self._bd, _entero(id_tarjeta, "id"))
+        if tarjeta is None:
+            return {"ok": False, "error": "La tarjeta no existe (puede que se haya borrado)."}
+        try:
+            comando = recetas.derivados(tarjeta.tipo, tarjeta.uid).comando_emulacion
+        except ValueError:
+            return {"ok": False, "error": "El tipo o el UID de la tarjeta no permiten generar la emulación."}
+
+        respuesta = self._proxmark.iniciar_emulacion(comando)
+        if not respuesta.ok:
+            return {"ok": False, "error": respuesta.error}
+        actividad.registrar(
+            self._bd, TipoActividad.EMULACION, f"Emulando «{tarjeta.nombre}» ({tarjeta.tipo})"
+        )
+        return {"ok": True, "estado": conversion.emulacion(respuesta.datos), "salida": respuesta.salida}
+
+    def _detener_emulacion(self) -> dict[str, Any]:
+        respuesta = self._proxmark.detener_emulacion()
+        return {"ok": True, "estado": conversion.emulacion(respuesta.datos), "salida": respuesta.salida}
+
+    def _estado_emulacion(self) -> dict[str, Any]:
+        return {"ok": True, "estado": conversion.emulacion(self._proxmark.estado_emulacion())}
+
+    # ---------------------------------------------------------------- terminal
+    def _ejecutar_terminal(self, comando: object, confirmado: object) -> dict[str, Any]:
+        comando = _texto(comando, "comando").strip()
+        clase = _clasificar_terminal(comando)
+        if clase == "vacio":
+            return {"ok": False, "error": "Escribe un comando."}
+        if clase == "emulacion":
+            return {
+                "ok": False,
+                "es_emulacion": True,
+                "error": "Para emular (sim) usa la sección «Clonado y emulación».",
+            }
+        # Por defecto se pide confirmación: solo la lista blanca de lectura corre directa.
+        if clase == "confirmar" and not bool(confirmado):
+            return {
+                "ok": False,
+                "requiere_confirmacion": True,
+                "comando": comando,
+                "error": "Este comando no está en la lista de lectura/diagnóstico. Confírmalo para ejecutarlo.",
+            }
+        res = self._proxmark.ejecutar(comando, timeout=TIMEOUT_TERMINAL)
+        return {"ok": res.ok, "salida": res.salida, "error": res.error}
 
     def _exportar(self) -> dict[str, Any]:
         ruta = self._dialogos.elegir_guardar(f"tarjetas_{self._hoy().isoformat()}.json")

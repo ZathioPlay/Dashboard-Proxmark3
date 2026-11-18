@@ -51,3 +51,19 @@ def test_guardar_y_leer_la_ultima_medicion(bd: BaseDatos) -> None:
     assert ultima is not None
     assert ultima.fecha == "2026-11-18 10:00:00"
     assert ultima.medicion == nueva
+
+
+def test_historial_de_antenas(bd: BaseDatos) -> None:
+    for h in range(5):
+        m = MedicionAntenas(lf=MedicionAntena(30.0 + h, EstadoAntena.OK), hf=MedicionAntena(20.0, EstadoAntena.OK))
+        antenas.guardar_medicion(bd, m, datetime(2026, 11, 18, 10 + h))
+
+    historial = antenas.historial(bd, limite=3)
+
+    assert [g.fecha for g in historial] == ["2026-11-18 14:00:00", "2026-11-18 13:00:00", "2026-11-18 12:00:00"]
+    assert historial[0].medicion.lf.voltios == 34.0
+    assert antenas.historial(bd) == antenas.historial(bd, 10)  # por defecto 10
+
+
+def test_historial_vacio(bd: BaseDatos) -> None:
+    assert antenas.historial(bd) == []

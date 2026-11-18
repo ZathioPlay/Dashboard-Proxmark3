@@ -7,6 +7,7 @@ from typing import Any
 
 from pm3_dashboard.pm3.localizador import OrigenCliente, ResultadoBusqueda
 from pm3_dashboard.pm3.modelos import (
+    EstadoEmulacion,
     InfoVersion,
     MedicionAntena,
     Respuesta,
@@ -99,6 +100,10 @@ def medicion(guardada: MedicionGuardada | None) -> dict[str, Any] | None:
         "lf": _antena(guardada.medicion.lf, MINIMO_LF_V),
         "hf": _antena(guardada.medicion.hf, MINIMO_HF_V),
     }
+
+
+def emulacion(estado: EstadoEmulacion) -> dict[str, Any]:
+    return {"activa": estado.activa, "comando": estado.comando, "salida": estado.salida}
 
 
 def voltios_texto(medida: MedicionAntena) -> str:
