@@ -15,17 +15,31 @@ from pm3_dashboard.pm3.modelos import (
     Respuesta,
     ResultadoComando,
     TarjetaLeida,
+    TipoTarjeta,
+    Volcado,
 )
 from pm3_dashboard.pm3.parsers import (
     parsear_hf_search,
     parsear_hw_tune,
     parsear_hw_version,
     parsear_lf_search,
+    parsear_volcado,
 )
 from pm3_dashboard.pm3.recetas import receta_hf, receta_lf
 
 BANDAS = ("auto", "hf", "lf")
 MSG_SIN_TARJETA = "No se detectó ninguna tarjeta sobre la antena de Proxmark3."
+MSG_SOLO_HF = "Solo se puede volcar la memoria de tarjetas HF."
+
+TIMEOUT_VOLCADO = 60.0
+# autopwn prueba miles de claves; en el peor caso tarda varios minutos.
+TIMEOUT_AUTOPWN = 600.0
+
+_COMANDO_DUMP = {
+    TipoTarjeta.MIFARE_CLASSIC_1K: "hf mf dump",
+    TipoTarjeta.MIFARE_CLASSIC_4K: "hf mf dump",
+    TipoTarjeta.ULTRALIGHT_NTAG: "hf mfu dump",
+}
 
 
 def _hoy() -> str:
@@ -98,8 +112,29 @@ class Proxmark3:
 
         return Respuesta(ok=False, error=MSG_SIN_TARJETA)
 
+    def leer_bloques(self, tipo: str, uid: str) -> Respuesta[Volcado]:
+        """Vuelca la memoria de una tarjeta HF con las claves por defecto (no intenta autopwn)."""
+        tipo_tarjeta = TipoTarjeta(tipo)
+        comando = _COMANDO_DUMP.get(tipo_tarjeta)
+        if comando is None:
+            return Respuesta(ok=False, error=MSG_SOLO_HF)
+        res = self.cliente.ejecutar(comando, timeout=TIMEOUT_VOLCADO)
+        if not res.ok:
+            return Respuesta(ok=False, error=res.error, salida=res.salida, puerto=res.puerto)
+        return Respuesta(ok=True, datos=parsear_volcado(res.salida, tipo_tarjeta), salida=res.salida, puerto=res.puerto)
+
+    def recuperar_claves(self, uid: str, tipo: str = TipoTarjeta.MIFARE_CLASSIC_1K) -> Respuesta[Volcado]:
+        """Recupera las claves de una MIFARE Classic con 'hf mf autopwn'. Operación larga."""
+        tipo_tarjeta = TipoTarjeta(tipo)
+        if tipo_tarjeta not in (TipoTarjeta.MIFARE_CLASSIC_1K, TipoTarjeta.MIFARE_CLASSIC_4K):
+            return Respuesta(ok=False, error="La recuperación de claves solo se aplica a MIFARE Classic.")
+        res = self.cliente.ejecutar("hf mf autopwn", timeout=TIMEOUT_AUTOPWN)
+        if not res.ok:
+            return Respuesta(ok=False, error=res.error, salida=res.salida, puerto=res.puerto)
+        return Respuesta(ok=True, datos=parsear_volcado(res.salida, tipo_tarjeta), salida=res.salida, puerto=res.puerto)
+
     def ejecutar(self, comando: str, timeout: float = 15.0) -> ResultadoComando:
-        """Comando libre (para la futura terminal)."""
+        """Comando libre (clonado generado por recetas.py, futura terminal)."""
         return self.cliente.ejecutar(comando, timeout=timeout)
 
     def iniciar_emulacion(self, comando: str) -> Respuesta[EstadoEmulacion]:

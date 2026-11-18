@@ -317,6 +317,10 @@ def test_solo_se_exponen_los_metodos_previstos(entorno: Entorno) -> None:
         "borrar_tarjeta",
         "exportar_tarjetas",
         "importar_tarjetas",
+        "leer_bloques",
+        "recuperar_claves",
+        "obtener_volcado",
+        "clonar_tarjeta",
     }
 
 
@@ -593,3 +597,157 @@ def test_importar_archivo_binario(entorno: Entorno, tmp_path: Path) -> None:
 
 def test_importar_cancelado(entorno: Entorno) -> None:
     assert entorno.api.importar_tarjetas() == {"ok": False, "cancelado": True}
+
+
+# ================================================================ memoria HF (volcado y clonado)
+
+from pathlib import Path as _Path  # noqa: E402
+
+from pm3_dashboard.pm3.recetas import nombre_archivo_volcado  # noqa: E402
+
+
+def _tarjeta_hf(entorno: Entorno, tipo: str = "MIFARE Classic 1K", uid: str = "5A3E7C1B") -> int:
+    return tarjetas.insertar_tarjeta(entorno.bd, NuevaTarjeta(nombre="Oficina", banda="hf", tipo=tipo, uid=uid))
+
+
+def _muestra(nombre: str) -> str:
+    return cargar_muestra(nombre)
+
+
+def test_leer_bloques_guarda_el_volcado_y_registra(entorno: Entorno) -> None:
+    id_tarjeta = _tarjeta_hf(entorno)
+    entorno.lanzador.responder("hf mf dump", stdout=_muestra("hf_mf_dump_1k_completo"))
+
+    resultado = entorno.api.leer_bloques(id_tarjeta)
+
+    assert resultado["ok"]
+    assert resultado["volcado"]["bloques_leidos"] == 64
+    assert resultado["volcado"]["completo"] is True
+    assert "aviso" not in resultado
+    # Se guarda y se puede releer sin tocar la Proxmark.
+    assert entorno.api.obtener_volcado(id_tarjeta)["volcado"]["bloques_leidos"] == 64
+    assert entorno.descripciones()[0] == "Leídos 64/64 bloques de «Oficina»"
+    json.dumps(resultado)
+
+
+def test_leer_bloques_con_sectores_sin_clave(entorno: Entorno) -> None:
+    id_tarjeta = _tarjeta_hf(entorno)
+    entorno.lanzador.responder("hf mf dump", stdout=_muestra("hf_mf_dump_1k_faltan_claves"))
+
+    resultado = entorno.api.leer_bloques(id_tarjeta)
+
+    assert resultado["ok"]
+    assert resultado["volcado"]["faltan_claves"] is True
+    assert resultado["volcado"]["bloques_leidos"] == 56
+
+
+def test_leer_bloques_avisa_si_el_uid_no_coincide(entorno: Entorno) -> None:
+    id_tarjeta = _tarjeta_hf(entorno, uid="99999999")  # distinto del de la muestra (5A3E7C1B)
+    entorno.lanzador.responder("hf mf dump", stdout=_muestra("hf_mf_dump_1k_completo"))
+
+    resultado = entorno.api.leer_bloques(id_tarjeta)
+
+    assert resultado["ok"]
+    assert "5A3E7C1B" in resultado["aviso"] and "99999999" in resultado["aviso"]
+
+
+def test_leer_bloques_de_una_tarjeta_lf_se_rechaza(entorno: Entorno) -> None:
+    id_tarjeta = tarjetas.insertar_tarjeta(entorno.bd, NuevaTarjeta(nombre="Llavero", banda="lf", tipo="EM410x", uid="0F0368568B"))
+
+    resultado = entorno.api.leer_bloques(id_tarjeta)
+
+    assert not resultado["ok"]
+    assert "HF" in resultado["error"]
+    assert entorno.lanzador.llamadas == []
+
+
+def test_leer_bloques_tarjeta_inexistente(entorno: Entorno) -> None:
+    assert not entorno.api.leer_bloques(9999)["ok"]
+
+
+def test_recuperar_claves(entorno: Entorno) -> None:
+    id_tarjeta = _tarjeta_hf(entorno)
+    entorno.lanzador.responder("hf mf autopwn", stdout=_muestra("hf_mf_autopwn"))
+
+    resultado = entorno.api.recuperar_claves(id_tarjeta)
+
+    assert resultado["ok"]
+    assert resultado["volcado"]["faltan_claves"] is False
+    assert entorno.lanzador.comandos == ["hf mf autopwn"]
+    assert "Recuperadas claves de «Oficina»" in entorno.descripciones()[0]
+
+
+def test_obtener_volcado_sin_ninguno(entorno: Entorno) -> None:
+    id_tarjeta = _tarjeta_hf(entorno)
+
+    assert entorno.api.obtener_volcado(id_tarjeta) == {"ok": True, "volcado": None}
+
+
+def test_clonar_usa_el_volcado_y_el_comando_de_recetas(entorno: Entorno, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("APPDATA", str(tmp_path))  # carpeta dumps dentro de tmp
+    id_tarjeta = _tarjeta_hf(entorno)
+    entorno.lanzador.responder("hf mf dump", stdout=_muestra("hf_mf_dump_1k_completo"))
+    entorno.api.leer_bloques(id_tarjeta)
+    entorno.lanzador.responder("hf mf cload -f dump_5A3E7C1B.bin", stdout="[+] Wrote block 0")
+
+    resultado = entorno.api.clonar_tarjeta(id_tarjeta)
+
+    assert resultado["ok"], resultado
+    # El comando lo genera recetas.py, no sale de la BD.
+    assert "hf mf cload -f dump_5A3E7C1B.bin" in entorno.lanzador.comandos
+    # El .bin se reconstruye dentro de dumps, con 1024 bytes (64 bloques * 16).
+    binario = tmp_path / "PM3-Dashboard" / "dumps" / "dump_5A3E7C1B.bin"
+    assert binario.is_file()
+    assert len(binario.read_bytes()) == 1024
+    assert binario.read_bytes()[:4] == bytes.fromhex("5A3E7C1B")
+    assert entorno.descripciones()[0].startswith("Clonada «Oficina»")
+
+
+def test_no_se_clona_sin_volcado(entorno: Entorno) -> None:
+    id_tarjeta = _tarjeta_hf(entorno)
+
+    resultado = entorno.api.clonar_tarjeta(id_tarjeta)
+
+    assert not resultado["ok"]
+    assert "Leer bloques" in resultado["error"]
+
+
+def test_no_se_clona_un_volcado_incompleto(entorno: Entorno) -> None:
+    id_tarjeta = _tarjeta_hf(entorno)
+    entorno.lanzador.responder("hf mf dump", stdout=_muestra("hf_mf_dump_1k_faltan_claves"))
+    entorno.api.leer_bloques(id_tarjeta)
+
+    resultado = entorno.api.clonar_tarjeta(id_tarjeta)
+
+    assert not resultado["ok"]
+    assert "Recuperar claves" in resultado["error"]
+    assert not any("cload" in c for c in entorno.lanzador.comandos)
+
+
+def test_no_se_clona_ultralight_todavia(entorno: Entorno) -> None:
+    id_tarjeta = _tarjeta_hf(entorno, tipo="MIFARE Ultralight / NTAG", uid="04689571")
+    entorno.lanzador.responder("hf mfu dump", stdout=_muestra("hf_mfu_dump"))
+    entorno.api.leer_bloques(id_tarjeta)
+
+    resultado = entorno.api.clonar_tarjeta(id_tarjeta)
+
+    assert not resultado["ok"]
+    assert "Ultralight" in resultado["error"]
+
+
+def test_un_uid_manipulado_no_escribe_fuera_de_dumps(entorno: Entorno, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    id_tarjeta = _tarjeta_hf(entorno)
+    entorno.lanzador.responder("hf mf dump", stdout=_muestra("hf_mf_dump_1k_completo"))
+    entorno.api.leer_bloques(id_tarjeta)
+    # Alguien edita la BD a mano con un UID que intenta salirse de la carpeta.
+    with entorno.bd.conexion() as con:
+        con.execute("UPDATE tarjetas SET uid = ? WHERE id = ?", ("../../../evil", id_tarjeta))
+
+    resultado = entorno.api.clonar_tarjeta(id_tarjeta)
+
+    assert not resultado["ok"]
+    assert not any("cload" in c for c in entorno.lanzador.comandos)  # no se ejecutó nada
+    # No se ha creado ningún fichero fuera de dumps.
+    assert list(tmp_path.glob("**/evil*")) == []
+    assert not (tmp_path.parent / "evil").exists()

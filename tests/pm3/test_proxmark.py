@@ -126,3 +126,56 @@ def test_las_respuestas_se_pueden_pasar_a_json(proxmark: Proxmark3, lanzador: La
 
     assert datos["datos"]["banda"] == "hf"
     assert datos["datos"]["tipo"] == "MIFARE Ultralight / NTAG"
+
+
+# ---------------------------------------------------------------- volcado y recuperación de claves
+
+from pm3_dashboard.pm3.modelos import Tecnologia, TipoTarjeta  # noqa: E402
+
+
+def test_leer_bloques_classic(proxmark: Proxmark3, lanzador: LanzadorFalso) -> None:
+    lanzador.responder("hf mf dump", stdout=cargar_muestra("hf_mf_dump_1k_completo"))
+
+    respuesta = proxmark.leer_bloques(TipoTarjeta.MIFARE_CLASSIC_1K, "5A 3E 7C 1B")
+
+    assert respuesta.ok
+    assert respuesta.datos is not None
+    assert respuesta.datos.tecnologia is Tecnologia.MIFARE_CLASSIC
+    assert respuesta.datos.bloques_leidos == 64
+    assert lanzador.comandos == ["hf mf dump"]
+
+
+def test_leer_bloques_ultralight_usa_mfu_dump(proxmark: Proxmark3, lanzador: LanzadorFalso) -> None:
+    lanzador.responder("hf mfu dump", stdout=cargar_muestra("hf_mfu_dump"))
+
+    respuesta = proxmark.leer_bloques(TipoTarjeta.ULTRALIGHT_NTAG, "04 68 95 71")
+
+    assert respuesta.ok
+    assert respuesta.datos is not None and respuesta.datos.tecnologia is Tecnologia.MIFARE_ULTRALIGHT
+    assert lanzador.comandos == ["hf mfu dump"]
+
+
+def test_leer_bloques_con_error_de_hardware(proxmark: Proxmark3, lanzador: LanzadorFalso) -> None:
+    lanzador.responder("hf mf dump", codigo=1, stderr="sin tarjeta")
+
+    respuesta = proxmark.leer_bloques(TipoTarjeta.MIFARE_CLASSIC_1K, "5A3E7C1B")
+
+    assert not respuesta.ok
+    assert respuesta.datos is None
+
+
+def test_recuperar_claves_usa_autopwn(proxmark: Proxmark3, lanzador: LanzadorFalso) -> None:
+    lanzador.responder("hf mf autopwn", stdout=cargar_muestra("hf_mf_autopwn"))
+
+    respuesta = proxmark.recuperar_claves("5A3E7C1B", TipoTarjeta.MIFARE_CLASSIC_1K)
+
+    assert respuesta.ok
+    assert respuesta.datos is not None and respuesta.datos.bloques_leidos == 64
+    assert lanzador.comandos == ["hf mf autopwn"]
+
+
+def test_recuperar_claves_solo_classic(proxmark: Proxmark3, lanzador: LanzadorFalso) -> None:
+    respuesta = proxmark.recuperar_claves("04689571", TipoTarjeta.ULTRALIGHT_NTAG)
+
+    assert not respuesta.ok
+    assert lanzador.llamadas == []

@@ -101,11 +101,110 @@ async function verTarjeta(id) {
     const notas = tarjeta.notas
         ? `<p class="text-sm text-slate-300 whitespace-pre-wrap bg-cyber-950 border border-slate-800 rounded-lg p-3">${escaparHtml(tarjeta.notas)}</p>`
         : '';
+    const esHF = tarjeta.banda === 'hf';
+    // El último volcado guardado (si lo hay) se muestra al abrir, sin leer la Proxmark.
+    let volcado = null;
+    if (esHF) {
+        const r = await api().obtener_volcado(id);
+        volcado = r.ok ? r.volcado : null;
+    }
+    const memoria = esHF ? htmlPanelMemoria(tarjeta, volcado) : '';
+
     await abrirModal({
         titulo: tarjeta.nombre,
-        html: notas + htmlFichaTarjeta(tarjeta),
+        html: notas + htmlFichaTarjeta(tarjeta) + memoria,
         botones: [{ texto: 'Cerrar', valor: 'cerrar' }],
+        ancho: esHF ? 'max-w-4xl' : 'max-w-2xl',
+        alAbrir: esHF ? (cuerpo) => engancharMemoria(cuerpo, tarjeta) : undefined,
     });
+}
+
+// ==================== VOLCADO Y CLONADO (dentro de la ficha) ====================
+
+function engancharMemoria(cuerpo, tarjeta) {
+    cuerpo.querySelector('[data-mem="leer"]')?.addEventListener('click', () => accionMemoria(cuerpo, tarjeta, 'leer'));
+    cuerpo.querySelector('[data-mem="recuperar"]')?.addEventListener('click', () => accionMemoria(cuerpo, tarjeta, 'recuperar'));
+    cuerpo.querySelector('[data-mem="clonar"]')?.addEventListener('click', () => clonar(cuerpo, tarjeta));
+}
+
+function estadoMemoria(cuerpo, texto, tipo) {
+    const caja = cuerpo.querySelector('[data-mem="estado"]');
+    caja.className = `rounded-lg p-2 text-xs ${CLASES_MENSAJE[tipo]}`;
+    caja.textContent = texto;
+    caja.classList.toggle('hidden', !texto);
+}
+
+function repintarMemoria(cuerpo, tarjeta, volcado) {
+    // Se sustituye el panel entero (botones, resumen y tabla) y se vuelve a enganchar.
+    const panel = cuerpo.querySelector('[data-mem="estado"]').parentElement;
+    panel.outerHTML = htmlPanelMemoria(tarjeta, volcado);
+    engancharMemoria(cuerpo, tarjeta);
+}
+
+async function accionMemoria(cuerpo, tarjeta, accion) {
+    const esRecuperar = accion === 'recuperar';
+    const botones = cuerpo.querySelectorAll('[data-mem="leer"], [data-mem="recuperar"], [data-mem="clonar"]');
+    botones.forEach((b) => (b.disabled = true));
+    estadoMemoria(cuerpo, esRecuperar
+        ? 'Recuperando claves… Puede tardar varios minutos. No cierres la aplicación.'
+        : 'Leyendo la memoria de la tarjeta…', 'aviso');
+    try {
+        const r = esRecuperar ? await api().recuperar_claves(tarjeta.id) : await api().leer_bloques(tarjeta.id);
+        if (!r.ok) {
+            estadoMemoria(cuerpo, r.error, 'error');
+            botones.forEach((b) => (b.disabled = false));
+            return;
+        }
+        repintarMemoria(cuerpo, tarjeta, r.volcado);
+        if (r.aviso) {
+            estadoMemoria(cuerpo, r.aviso, 'aviso');
+        }
+        cargarResumen(); // la lectura aparece en la actividad reciente
+    } catch (error) {
+        estadoMemoria(cuerpo, `Error: ${textoError(error)}`, 'error');
+        botones.forEach((b) => (b.disabled = false));
+    }
+}
+
+function deshabilitarBotonesMemoria(cuerpo, deshabilitar) {
+    cuerpo.querySelectorAll('[data-mem="leer"], [data-mem="recuperar"], [data-mem="clonar"]')
+        .forEach((b) => (b.disabled = deshabilitar));
+}
+
+// La confirmación es EN LÍNEA (no un modal aparte): la ficha usa el único
+// <dialog>, así que abrir otro modal encima la cerraría.
+function clonar(cuerpo, tarjeta) {
+    deshabilitarBotonesMemoria(cuerpo, true);
+    const caja = cuerpo.querySelector('[data-mem="estado"]');
+    caja.className = `rounded-lg p-3 text-xs ${CLASES_MENSAJE.aviso} space-y-2`;
+    caja.classList.remove('hidden');
+    caja.innerHTML = `
+        <p>Se va a <strong class="text-white">escribir</strong> el volcado de «${escaparHtml(tarjeta.nombre)}» en la tarjeta mágica que haya sobre la antena. No se puede deshacer.</p>
+        <p>${escaparHtml(AVISO_USO)}</p>
+        <div class="flex justify-end gap-2 pt-1">
+            <button data-mem="cancelar-clon" class="px-3 py-1.5 bg-cyber-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-semibold rounded-lg">Cancelar</button>
+            <button data-mem="confirmar-clon" class="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold rounded-lg">Sí, clonar</button>
+        </div>`;
+    caja.querySelector('[data-mem="cancelar-clon"]').addEventListener('click', () => {
+        estadoMemoria(cuerpo, '', 'aviso');
+        deshabilitarBotonesMemoria(cuerpo, false);
+    });
+    caja.querySelector('[data-mem="confirmar-clon"]').addEventListener('click', () => ejecutarClonado(cuerpo, tarjeta));
+}
+
+async function ejecutarClonado(cuerpo, tarjeta) {
+    estadoMemoria(cuerpo, 'Escribiendo en la tarjeta mágica…', 'aviso');
+    try {
+        const r = await api().clonar_tarjeta(tarjeta.id);
+        estadoMemoria(cuerpo, r.ok ? 'Tarjeta clonada correctamente.' : r.error, r.ok ? 'ok' : 'error');
+        if (r.ok) {
+            cargarResumen();
+        }
+    } catch (error) {
+        estadoMemoria(cuerpo, `Error al clonar: ${textoError(error)}`, 'error');
+    } finally {
+        deshabilitarBotonesMemoria(cuerpo, false);
+    }
 }
 
 function htmlFormularioEdicion(nombre, notas, error) {

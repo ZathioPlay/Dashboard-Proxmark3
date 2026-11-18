@@ -47,4 +47,21 @@ CREATE TABLE mediciones_antenas (
 CREATE INDEX idx_mediciones_fecha ON mediciones_antenas (fecha);
 """
 
-MIGRACIONES: tuple[str, ...] = (_V1,)
+# v2: volcados de memoria (leer bloques HF). Un volcado es un dato LEÍDO de la
+# tarjeta (bloques en hexadecimal), nunca un comando. Se borra con su tarjeta.
+_V2 = """
+CREATE TABLE volcados (
+    id              INTEGER PRIMARY KEY,
+    tarjeta_id      INTEGER NOT NULL REFERENCES tarjetas(id) ON DELETE CASCADE,
+    fecha           TEXT NOT NULL,
+    tecnologia      TEXT NOT NULL,
+    bloques_leidos  INTEGER NOT NULL,
+    total_bloques   INTEGER NOT NULL,
+    completo        INTEGER NOT NULL,
+    salida          TEXT NOT NULL DEFAULT '',
+    datos_json      TEXT NOT NULL
+);
+CREATE INDEX idx_volcados_tarjeta ON volcados (tarjeta_id);
+"""
+
+MIGRACIONES: tuple[str, ...] = (_V1, _V2)

@@ -157,3 +157,76 @@ def test_lf_search_em410x_formato_antiguo() -> None:
 
 def test_lf_search_sin_tarjeta() -> None:
     assert parsear_lf_search(cargar_muestra("lf_search_vacio")) is None
+
+
+# ---------------------------------------------------------------- volcado (leer bloques)
+
+from pm3_dashboard.pm3.modelos import Tecnologia  # noqa: E402
+from pm3_dashboard.pm3.parsers import parsear_hf_mfu_dump, parsear_volcado  # noqa: E402
+
+
+def test_volcado_classic_completo() -> None:
+    volcado = parsear_volcado(cargar_muestra("hf_mf_dump_1k_completo"), TipoTarjeta.MIFARE_CLASSIC_1K)
+
+    assert volcado.tecnologia is Tecnologia.MIFARE_CLASSIC
+    assert len(volcado.sectores) == 16
+    assert all(len(s.bloques) == 4 for s in volcado.sectores)
+    assert volcado.total_bloques == 64
+    assert volcado.bloques_leidos == 64
+    assert volcado.faltan_claves is False
+    assert all(s.completo for s in volcado.sectores)
+    assert volcado.uid == "5A3E7C1B"
+    assert volcado.sectores[0].bloques[0].datos == "5A 3E 7C 1B 88 08 04 00 62 63 64 65 66 67 68 69"
+    assert volcado.sectores[0].bloques[0].leido is True
+
+
+def test_volcado_classic_con_sectores_sin_clave() -> None:
+    volcado = parsear_volcado(cargar_muestra("hf_mf_dump_1k_faltan_claves"), TipoTarjeta.MIFARE_CLASSIC_1K)
+
+    assert volcado.faltan_claves is True
+    assert volcado.bloques_leidos == 56
+    assert volcado.total_bloques == 64
+    incompletos = [s.indice for s in volcado.sectores if not s.completo]
+    assert incompletos == [5, 9]
+    # Los bloques de un sector sin clave quedan marcados como no leídos y sin datos.
+    sector5 = volcado.sectores[5]
+    assert all(not b.leido and b.datos == "" for b in sector5.bloques)
+    assert [b.indice for b in sector5.bloques] == [20, 21, 22, 23]
+
+
+def test_volcado_classic_4k_tiene_40_sectores() -> None:
+    # Sin bloques en la salida: estructura correcta, todo sin leer.
+    volcado = parsear_volcado("[usb] pm3 --> hf mf dump\n[!] no keys\n", TipoTarjeta.MIFARE_CLASSIC_4K)
+
+    assert len(volcado.sectores) == 40
+    assert volcado.total_bloques == 256  # 32*4 + 8*16
+    assert volcado.bloques_leidos == 0
+    assert volcado.faltan_claves is True
+
+
+def test_volcado_ultralight() -> None:
+    volcado = parsear_hf_mfu_dump(cargar_muestra("hf_mfu_dump"))
+
+    assert volcado.tecnologia is Tecnologia.MIFARE_ULTRALIGHT
+    assert volcado.tipo is TipoTarjeta.ULTRALIGHT_NTAG
+    assert volcado.total_bloques == 16
+    assert volcado.bloques_leidos == 16
+    assert volcado.faltan_claves is False
+    assert volcado.uid == "04689571"
+    assert volcado.sectores[0].bloques[0].datos == "04 68 95 71"
+    assert all(len(b.datos.split()) == 4 for s in volcado.sectores for b in s.bloques)
+
+
+def test_volcado_autopwn_devuelve_todo_leido() -> None:
+    volcado = parsear_volcado(cargar_muestra("hf_mf_autopwn"), TipoTarjeta.MIFARE_CLASSIC_1K)
+
+    assert volcado.bloques_leidos == 64
+    assert volcado.faltan_claves is False
+
+
+def test_la_cabecera_no_se_cuenta_como_bloque() -> None:
+    texto = "[=]  blk | data\n[=]   0  | 5A 3E 7C 1B 88 08 04 00 62 63 64 65 66 67 68 69\n"
+    volcado = parsear_volcado(texto, TipoTarjeta.MIFARE_CLASSIC_1K)
+
+    assert volcado.bloques_leidos == 1
+    assert volcado.sectores[0].bloques[0].datos.startswith("5A 3E")

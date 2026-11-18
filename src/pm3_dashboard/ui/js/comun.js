@@ -86,11 +86,15 @@ const ESTILOS_BOTON = {
 /**
  * Abre la ventana emergente y devuelve una promesa con el 'valor' del botón
  * pulsado (o null si se cierra con Esc).
- *   abrirModal({ titulo, html, botones: [{ texto, valor, estilo }] })
- * 'html' debe venir ya escapado.
+ *   abrirModal({ titulo, html, botones: [{ texto, valor, estilo }], ancho, alAbrir })
+ * 'html' debe venir ya escapado. 'ancho' es una clase Tailwind (p. ej. 'max-w-4xl').
+ * 'alAbrir(cuerpo)' se llama tras abrir, para enganchar contenido interactivo.
  */
-function abrirModal({ titulo, html, botones }) {
+const ANCHO_MODAL_BASE = 'bg-cyber-900 text-slate-200 border border-slate-700 rounded-2xl p-0 w-full shadow-2xl';
+
+function abrirModal({ titulo, html, botones, ancho = 'max-w-2xl', alAbrir }) {
     const modal = $('modal');
+    modal.className = `${ANCHO_MODAL_BASE} ${ancho}`;
     ponerTexto('modal-titulo', titulo);
     $('modal-cuerpo').innerHTML = html;
 
@@ -110,6 +114,7 @@ function abrirModal({ titulo, html, botones }) {
         modal.addEventListener('close', () => resolver(modal.returnValue || null), { once: true });
         modal.showModal();
         modal.querySelector('input, textarea')?.focus();
+        alAbrir?.($('modal-cuerpo'));
     });
 }
 
@@ -167,7 +172,7 @@ function htmlFichaTarjeta(t) {
             <div class="pt-3 space-y-2">
                 ${htmlComando('Comando de clonado', d.comando_clonado)}
                 ${htmlComando('Comando de emulación', d.comando_emulacion)}
-                <p class="text-[11px] text-slate-500">Generados a partir del tipo y el UID. Clonar y emular desde la app llegará en una próxima versión.</p>
+                <p class="text-[11px] text-slate-500">Generados a partir del tipo y el UID. La emulación desde la app llegará en una próxima versión.</p>
             </div>`;
     } else {
         html += `<p class="mt-3 text-xs text-amber-200 bg-amber-950/30 border border-amber-500/30 rounded-lg p-2">

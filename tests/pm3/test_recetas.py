@@ -114,3 +114,20 @@ def test_receta_em410x_usa_el_tipo_canonico() -> None:
     assert tarjeta.uid == "0F 03 68 56 8B"
     assert (tarjeta.atqa, tarjeta.sak) == ("", "")
     assert tarjeta.derivados.comando_clonado == "lf em 410x clone --id 0F0368568B"
+
+
+# ---------------------------------------------------------------- nombre de archivo de clonado
+
+from pm3_dashboard.pm3.recetas import nombre_archivo_volcado  # noqa: E402
+
+
+def test_nombre_archivo_volcado_desde_uid_validado() -> None:
+    assert nombre_archivo_volcado("5A 3E 7C 1B") == "dump_5A3E7C1B.bin"
+    assert nombre_archivo_volcado("0f0368568b") == "dump_0F0368568B.bin"
+
+
+@pytest.mark.parametrize("uid", ["../../evil", "5A3E/..", "5A 3E; rm", "", "zz", r"..\..\x"])
+def test_nombre_archivo_volcado_rechaza_uid_manipulado(uid: str) -> None:
+    # Nunca debe producir un nombre con separadores de ruta: el UID se valida como hex.
+    with pytest.raises(ValueError):
+        nombre_archivo_volcado(uid)

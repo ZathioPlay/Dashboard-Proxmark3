@@ -10,13 +10,17 @@ from __future__ import annotations
 import re
 
 from pm3_dashboard.pm3.modelos import (
+    BloqueMemoria,
     EstadoAntena,
     InfoVersion,
     MedicionAntena,
     MedicionAntenas,
+    SectorMemoria,
     TarjetaHF,
     TarjetaLF,
+    Tecnologia,
     TipoTarjeta,
+    Volcado,
 )
 from pm3_dashboard.pm3.salida import limpiar_salida
 
@@ -181,3 +185,109 @@ def parsear_lf_search(texto: str) -> TarjetaLF | None:
         if coincidencia:
             return TarjetaLF(id_em=coincidencia.group(1).upper())
     return None
+
+
+# ---------------------------------------------------------------------------
+# Volcado de memoria (hf mf dump / hf mfu dump / hf mf autopwn)
+# ---------------------------------------------------------------------------
+# Línea de bloque/página: prefijo opcional, índice, '|' y los bytes en hex.
+# Ej.: "[=]   0  | 5A 3E 7C 1B 88 ...". La cabecera "blk | data" no casa
+# porque su índice no es numérico.
+_RE_LINEA_BLOQUE = re.compile(
+    r"^\s*(?:\[[=+!#\-\s]\]\s*)?(\d{1,3})\s*[|:]\s*((?:[0-9A-Fa-f]{2}[ \t]*){4,})"
+)
+# Cuántos bloques tiene cada sector de una MIFARE Classic.
+_SECTORES_1K = [4] * 16
+_SECTORES_4K = [4] * 32 + [16] * 8
+
+
+def _normalizar_bytes(crudo: str) -> str:
+    """'5a3e 7C1b' -> '5A 3E 7C 1B'."""
+    hexa = "".join(crudo.split()).upper()
+    return " ".join(hexa[i : i + 2] for i in range(0, len(hexa), 2))
+
+
+def _bloques_leidos(texto: str, bytes_por_bloque: int) -> dict[int, str]:
+    """{índice: datos} de las líneas de bloque que tienen el tamaño esperado."""
+    nibbles = bytes_por_bloque * 2
+    leidos: dict[int, str] = {}
+    for linea in texto.splitlines():
+        coincidencia = _RE_LINEA_BLOQUE.match(linea)
+        if not coincidencia:
+            continue
+        hexa = "".join(coincidencia.group(2).split())
+        if len(hexa) < nibbles:
+            continue
+        indice = int(coincidencia.group(1))
+        # Solo el primer valor para cada índice (evita duplicados de resúmenes).
+        leidos.setdefault(indice, _normalizar_bytes(hexa[:nibbles]))
+    return leidos
+
+
+def _estructura_classic(tipo: TipoTarjeta) -> list[int]:
+    return _SECTORES_4K if tipo is TipoTarjeta.MIFARE_CLASSIC_4K else _SECTORES_1K
+
+
+def parsear_hf_mf_dump(texto: str, tipo: TipoTarjeta) -> Volcado:
+    """Volcado de una MIFARE Classic. Los sectores sin clave quedan marcados como no leídos."""
+    texto = limpiar_salida(texto)
+    leidos = _bloques_leidos(texto, bytes_por_bloque=16)
+
+    sectores: list[SectorMemoria] = []
+    bloque_actual = 0
+    total = 0
+    total_leidos = 0
+    for indice_sector, n_bloques in enumerate(_estructura_classic(tipo)):
+        bloques: list[BloqueMemoria] = []
+        for _ in range(n_bloques):
+            datos = leidos.get(bloque_actual, "")
+            leido = bloque_actual in leidos
+            bloques.append(BloqueMemoria(indice=bloque_actual, datos=datos, leido=leido))
+            total += 1
+            total_leidos += int(leido)
+            bloque_actual += 1
+        completo = all(b.leido for b in bloques)
+        sectores.append(SectorMemoria(indice=indice_sector, bloques=bloques, completo=completo))
+
+    return Volcado(
+        tecnologia=Tecnologia.MIFARE_CLASSIC,
+        tipo=tipo,
+        uid=sectores[0].bloques[0].datos.replace(" ", "")[:8] if sectores[0].bloques[0].leido else "",
+        sectores=sectores,
+        total_bloques=total,
+        bloques_leidos=total_leidos,
+        faltan_claves=any(not s.completo for s in sectores),
+    )
+
+
+def parsear_hf_mfu_dump(texto: str) -> Volcado:
+    """Volcado de Ultralight / NTAG: páginas de 4 bytes, sin claves ni sectores reales."""
+    texto = limpiar_salida(texto)
+    leidos = _bloques_leidos(texto, bytes_por_bloque=4)
+
+    paginas = [
+        BloqueMemoria(indice=indice, datos=datos, leido=True)
+        for indice, datos in sorted(leidos.items())
+    ]
+    # Se agrupan de 4 en 4 solo para mostrarlas; en Ultralight no hay sectores.
+    sectores = [
+        SectorMemoria(indice=i // 4, bloques=paginas[i : i + 4], completo=True)
+        for i in range(0, len(paginas), 4)
+    ]
+    uid = "".join(paginas[0].datos.split())[:8] if paginas else ""
+    return Volcado(
+        tecnologia=Tecnologia.MIFARE_ULTRALIGHT,
+        tipo=TipoTarjeta.ULTRALIGHT_NTAG,
+        uid=uid,
+        sectores=sectores,
+        total_bloques=len(paginas),
+        bloques_leidos=len(paginas),
+        faltan_claves=False,
+    )
+
+
+def parsear_volcado(texto: str, tipo: TipoTarjeta) -> Volcado:
+    """Elige el parser según el tipo de tarjeta."""
+    if tipo is TipoTarjeta.ULTRALIGHT_NTAG:
+        return parsear_hf_mfu_dump(texto)
+    return parsear_hf_mf_dump(texto, tipo)

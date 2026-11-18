@@ -142,3 +142,38 @@ class EstadoEmulacion:
     activa: bool
     comando: str | None = None
     salida: str = ""
+
+
+# ---------------------------------------------------------------------------
+# Volcado de memoria (leer bloques HF)
+# ---------------------------------------------------------------------------
+class Tecnologia(StrEnum):
+    MIFARE_CLASSIC = "mifare_classic"
+    MIFARE_ULTRALIGHT = "mifare_ultralight"
+
+
+@dataclass(frozen=True)
+class BloqueMemoria:
+    indice: int
+    datos: str  # "XX XX ..." en hexadecimal, o "" si no se pudo leer
+    leido: bool
+
+
+@dataclass(frozen=True)
+class SectorMemoria:
+    indice: int
+    bloques: list[BloqueMemoria]
+    completo: bool  # todos sus bloques se leyeron
+
+
+@dataclass(frozen=True)
+class Volcado:
+    """Resultado de volcar la memoria de una tarjeta HF (dato leído, nunca un comando)."""
+
+    tecnologia: Tecnologia
+    tipo: TipoTarjeta
+    uid: str
+    sectores: list[SectorMemoria]
+    total_bloques: int
+    bloques_leidos: int
+    faltan_claves: bool

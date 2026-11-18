@@ -43,6 +43,16 @@ def uid_con_espacios(uid: str) -> str:
     return " ".join(compacto[i : i + 2] for i in range(0, len(compacto), 2))
 
 
+def nombre_archivo_volcado(uid: str) -> str:
+    """Nombre del .bin para clonar. Seguridad: solo el UID validado como hexadecimal.
+
+    Nunca se usa el UID en crudo (podría llevar separadores de ruta o un comando):
+    _uid_compacto() garantiza que solo contiene [0-9A-F], así que el nombre no
+    puede escaparse de la carpeta de destino.
+    """
+    return f"dump_{_uid_compacto(uid)}.bin"
+
+
 def derivados(tipo: TipoTarjeta, uid: str) -> Derivados:
     """Datos derivados del tipo y el UID. Lanza ValueError si el UID no es hexadecimal."""
     tipo = TipoTarjeta(tipo)

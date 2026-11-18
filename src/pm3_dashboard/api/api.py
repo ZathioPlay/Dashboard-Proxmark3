@@ -19,19 +19,36 @@ from typing import Any
 from pm3_dashboard import paths
 from pm3_dashboard.api import conversion
 from pm3_dashboard.api.dialogos import Dialogos, DialogosPywebview
-from pm3_dashboard.pm3 import Proxmark3
+from pm3_dashboard.pm3 import Proxmark3, recetas
 from pm3_dashboard.pm3.cliente import MSG_EMULACION, MSG_OCUPADA
-from pm3_dashboard.pm3.modelos import Banda, Respuesta, TarjetaLeida
+from pm3_dashboard.pm3.modelos import Banda, Respuesta, TarjetaLeida, Volcado
 from pm3_dashboard.storage import BaseDatos, DatosNoValidos, ErrorBaseDatos
-from pm3_dashboard.storage import actividad, antenas, intercambio, tarjetas
+from pm3_dashboard.storage import actividad, antenas, intercambio, tarjetas, volcados
 from pm3_dashboard.storage.actividad import TipoActividad
 from pm3_dashboard.storage.intercambio import ErrorImportacion
 from pm3_dashboard.storage.tarjetas import NuevaTarjeta
+from pm3_dashboard.pm3.modelos import Tecnologia
 
 logger = logging.getLogger(__name__)
 
 EVENTOS_RECIENTES = 8
 MENSAJES_OCUPADA = (MSG_OCUPADA, MSG_EMULACION)
+TIMEOUT_CLONADO = 120.0
+
+
+def _bytes_volcado(volcado: Volcado) -> bytes:
+    """Reconstruye la imagen binaria de la tarjeta a partir de los bloques guardados.
+
+    Lanza ValueError si algún bloque no se leyó o no tiene 16 bytes.
+    """
+    datos = bytearray()
+    for sector in volcado.sectores:
+        for bloque in sector.bloques:
+            hexa = "".join(bloque.datos.split())
+            if not bloque.leido or len(hexa) != 32:
+                raise ValueError("El volcado está incompleto: no se puede reconstruir la tarjeta.")
+            datos += bytes.fromhex(hexa)
+    return bytes(datos)
 
 
 class ErrorEntrada(ValueError):
@@ -135,6 +152,23 @@ class Api:
     def importar_tarjetas(self) -> dict[str, Any]:
         """Abre el diálogo de abrir e importa las tarjetas válidas del JSON."""
         return self._seguro(self._importar)
+
+    # ================================================================ memoria HF (volcado y clonado)
+    def leer_bloques(self, id_tarjeta: int) -> dict[str, Any]:
+        """Vuelca la memoria de una tarjeta HF guardada (claves por defecto) y lo guarda."""
+        return self._seguro(lambda: self._leer_bloques(id_tarjeta))
+
+    def recuperar_claves(self, id_tarjeta: int) -> dict[str, Any]:
+        """Recupera las claves con 'hf mf autopwn'. OPERACIÓN LARGA (varios minutos)."""
+        return self._seguro(lambda: self._recuperar_claves(id_tarjeta))
+
+    def obtener_volcado(self, id_tarjeta: int) -> dict[str, Any]:
+        """Último volcado guardado de la tarjeta (sin leer la Proxmark)."""
+        return self._seguro(lambda: self._obtener_volcado(id_tarjeta))
+
+    def clonar_tarjeta(self, id_tarjeta: int) -> dict[str, Any]:
+        """Clona a una tarjeta mágica usando el volcado guardado. ESCRITURA (se confirma en la interfaz)."""
+        return self._seguro(lambda: self._clonar_tarjeta(id_tarjeta))
 
     # ================================================================ implementación
     def _seguro(self, operacion: Callable[[], dict[str, Any]]) -> dict[str, Any]:
@@ -299,6 +333,97 @@ class Api:
             self._bd, TipoActividad.BORRADO, f"Borrada «{tarjeta.nombre}» ({tarjeta.tipo}, {tarjeta.uid})"
         )
         return {"ok": True}
+
+    # ---------------------------------------------------------------- memoria HF
+    def _tarjeta_hf(self, id_tarjeta: object) -> tarjetas.TarjetaGuardada:
+        tarjeta = tarjetas.obtener(self._bd, _entero(id_tarjeta, "id"))
+        if tarjeta is None:
+            raise ErrorEntrada("La tarjeta no existe (puede que se haya borrado).")
+        if tarjeta.banda == Banda.LF:
+            raise ErrorEntrada("Solo se puede volcar o clonar la memoria de tarjetas HF.")
+        return tarjeta
+
+    def _guardar_volcado(self, tarjeta: tarjetas.TarjetaGuardada, respuesta: Respuesta[Volcado]) -> dict[str, Any]:
+        volcado = respuesta.datos
+        if not respuesta.ok or volcado is None:
+            return {"ok": False, "error": respuesta.error or "No se pudo volcar la memoria.", "salida": respuesta.salida}
+        guardado = volcados.guardar_volcado(self._bd, tarjeta.id, volcado, salida=respuesta.salida)
+        resultado = {"ok": True, "volcado": conversion.volcado(guardado)}
+
+        uid_leido = volcado.uid
+        uid_guardado = tarjeta.uid.replace(" ", "").upper()
+        if uid_leido and uid_guardado and uid_leido != uid_guardado:
+            resultado["aviso"] = (
+                f"El UID leído ({uid_leido}) no coincide con el de la tarjeta guardada "
+                f"({uid_guardado}). ¿Es la tarjeta correcta?"
+            )
+        return resultado
+
+    def _leer_bloques(self, id_tarjeta: object) -> dict[str, Any]:
+        tarjeta = self._tarjeta_hf(id_tarjeta)
+        respuesta = self._proxmark.leer_bloques(tarjeta.tipo, tarjeta.uid)
+        resultado = self._guardar_volcado(tarjeta, respuesta)
+        if resultado["ok"]:
+            datos = respuesta.datos
+            assert datos is not None
+            actividad.registrar(
+                self._bd,
+                TipoActividad.LECTURA,
+                f"Leídos {datos.bloques_leidos}/{datos.total_bloques} bloques de «{tarjeta.nombre}»",
+            )
+        return resultado
+
+    def _recuperar_claves(self, id_tarjeta: object) -> dict[str, Any]:
+        tarjeta = self._tarjeta_hf(id_tarjeta)
+        respuesta = self._proxmark.recuperar_claves(tarjeta.uid, tarjeta.tipo)
+        resultado = self._guardar_volcado(tarjeta, respuesta)
+        if resultado["ok"]:
+            datos = respuesta.datos
+            assert datos is not None
+            actividad.registrar(
+                self._bd,
+                TipoActividad.LECTURA,
+                f"Recuperadas claves de «{tarjeta.nombre}» ({datos.bloques_leidos}/{datos.total_bloques} bloques)",
+            )
+        return resultado
+
+    def _obtener_volcado(self, id_tarjeta: object) -> dict[str, Any]:
+        guardado = volcados.ultimo_volcado(self._bd, _entero(id_tarjeta, "id"))
+        return {"ok": True, "volcado": conversion.volcado(guardado)}
+
+    def _clonar_tarjeta(self, id_tarjeta: object) -> dict[str, Any]:
+        tarjeta = self._tarjeta_hf(id_tarjeta)
+        guardado = volcados.ultimo_volcado(self._bd, tarjeta.id)
+        if guardado is None:
+            return {"ok": False, "error": "No hay ningún volcado guardado. Pulsa «Leer bloques» primero."}
+        volcado = guardado.volcado
+        if volcado.tecnologia is not Tecnologia.MIFARE_CLASSIC:
+            return {"ok": False, "error": "El clonado de Ultralight / NTAG aún no está disponible."}
+        if volcado.faltan_claves:
+            return {"ok": False, "error": "El volcado está incompleto (faltan claves). Pulsa «Recuperar claves» antes de clonar."}
+
+        try:
+            contenido = _bytes_volcado(volcado)
+        except ValueError as exc:
+            return {"ok": False, "error": str(exc)}
+
+        # Seguridad: el nombre sale del UID validado como hexadecimal (recetas), y el
+        # fichero se escribe solo dentro de la carpeta dumps.
+        dumps = paths.carpeta_dumps().resolve()
+        ruta = (dumps / recetas.nombre_archivo_volcado(tarjeta.uid)).resolve()
+        if ruta.parent != dumps:
+            return {"ok": False, "error": "Ruta de volcado no válida."}
+        ruta.write_bytes(contenido)
+
+        # El comando lo genera recetas.py a partir del tipo y el UID, nunca uno guardado.
+        comando = recetas.derivados(tarjeta.tipo, tarjeta.uid).comando_clonado
+        res = self._proxmark.ejecutar(comando, timeout=TIMEOUT_CLONADO)
+        if not res.ok:
+            return {"ok": False, "error": res.error or "No se pudo clonar.", "salida": res.salida}
+        actividad.registrar(
+            self._bd, TipoActividad.CLONADO, f"Clonada «{tarjeta.nombre}» ({tarjeta.tipo}, {tarjeta.uid})"
+        )
+        return {"ok": True, "salida": res.salida}
 
     def _exportar(self) -> dict[str, Any]:
         ruta = self._dialogos.elegir_guardar(f"tarjetas_{self._hoy().isoformat()}.json")

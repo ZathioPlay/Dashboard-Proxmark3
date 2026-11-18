@@ -18,6 +18,7 @@ from pm3_dashboard.pm3.recetas import derivados
 from pm3_dashboard.storage.antenas import MedicionGuardada
 from pm3_dashboard.storage.intercambio import ResultadoImportacion
 from pm3_dashboard.storage.tarjetas import TarjetaGuardada
+from pm3_dashboard.storage.volcados import VolcadoGuardado
 
 # ---------------------------------------------------------------------------
 # Estado del dispositivo
@@ -129,3 +130,21 @@ def tarjeta_guardada(tarjeta: TarjetaGuardada) -> dict[str, Any]:
 
 def resultado_importacion(resultado: ResultadoImportacion, archivo: str) -> dict[str, Any]:
     return {"ok": True, "archivo": archivo, **asdict(resultado)}
+
+
+def volcado(guardado: VolcadoGuardado | None) -> dict[str, Any] | None:
+    if guardado is None:
+        return None
+    v = guardado.volcado
+    return {
+        "id": guardado.id,
+        "fecha": guardado.fecha,
+        "tecnologia": v.tecnologia.value,
+        "tipo": v.tipo.value,
+        "uid": v.uid,
+        "total_bloques": v.total_bloques,
+        "bloques_leidos": v.bloques_leidos,
+        "faltan_claves": v.faltan_claves,
+        "completo": not v.faltan_claves,
+        "sectores": [asdict(sector) for sector in v.sectores],
+    }

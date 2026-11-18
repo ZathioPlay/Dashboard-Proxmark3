@@ -7,7 +7,7 @@ const SECCIONES = [
     { id: 'inicio',   titulo: 'Inicio',               descripcion: '' },
     { id: 'antenas',  titulo: 'Antenas',              descripcion: 'Medición de las antenas LF y HF con hw tune.' },
     { id: 'lectura',  titulo: 'Lectura',              descripcion: '' },
-    { id: 'clonado',  titulo: 'Clonado y emulación',  descripcion: 'Clonar tarjetas propias o emularlas desde la Proxmark3.' },
+    { id: 'clonado',  titulo: 'Clonado y emulación',  descripcion: 'Para clonar una tarjeta HF, ábrela en Base de datos, lee sus bloques y pulsa «Clonar». La emulación llegará en una próxima versión.' },
     { id: 'base',     titulo: 'Base de datos',        descripcion: '' },
     { id: 'terminal', titulo: 'Terminal',             descripcion: 'Consola para enviar comandos al cliente de Iceman.' },
 ];
