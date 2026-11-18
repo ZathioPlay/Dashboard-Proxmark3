@@ -876,3 +876,33 @@ def test_terminal_no_hay_forma_de_saltarse_la_confirmacion(entorno: Entorno) -> 
         resultado = entorno.api.ejecutar_terminal(comando, confirmado=False)
         assert resultado.get("requiere_confirmacion") is True, comando
     assert entorno.lanzador.llamadas == []
+
+
+@pytest.mark.parametrize(
+    "comando",
+    [
+        "hf mfu restore -f dump",   # termina en "dump" pero ESCRIBE
+        "hf mf cload -f dump",      # termina en "dump" pero ESCRIBE
+        "hf mf wrbl --blk 0 -d 00000000000000000000000000000000",
+        "hf mf restore",
+        "lf t55xx write -b 1 -d 11223344",
+    ],
+)
+def test_terminal_escritura_que_acaba_en_palabra_segura_pide_confirmacion(entorno: Entorno, comando: str) -> None:
+    resultado = entorno.api.ejecutar_terminal(comando)
+
+    assert resultado.get("requiere_confirmacion") is True, comando
+    assert entorno.lanzador.llamadas == []  # nunca llega al cliente sin confirmar
+
+
+@pytest.mark.parametrize(
+    "comando",
+    ["hf mf dump", "hf mfu dump", "lf t55xx dump", "hf mfu info", "hf 14a reader", "hw version"],
+)
+def test_terminal_lecturas_de_la_lista_blanca_corren_directas(entorno: Entorno, comando: str) -> None:
+    entorno.lanzador.responder(comando, stdout="[+] ok")
+
+    resultado = entorno.api.ejecutar_terminal(comando)
+
+    assert resultado["ok"], comando
+    assert entorno.lanzador.comandos == [comando]

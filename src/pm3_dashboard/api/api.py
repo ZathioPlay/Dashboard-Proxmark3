@@ -43,25 +43,25 @@ MAX_MEDICIONES = 50
 # comando pide confirmación (así un comando de escritura nuevo o desconocido
 # nunca corre sin confirmar). Ampliar estas listas es seguro.
 #
-# Un comando es de lectura si empieza por uno de estos prefijos...
+# Un comando es de lectura SOLO si empieza por uno de estos prefijos. No se
+# clasifica por la última palabra: "hf mf cload -f dump" o "hf mfu restore -f
+# dump" terminan en "dump" pero ESCRIBEN en la tarjeta, así que deben confirmar.
+# Si falta algún comando de lectura útil, se añade aquí como prefijo explícito.
 PREFIJOS_LECTURA: tuple[str, ...] = (
     "hw version", "hw status", "hw tune", "hw ping", "hw dbg", "hw detectreader",
     "hf search", "lf search", "data", "help", "prefs show",
     "hf mf info", "hf mf chk", "hf mf fchk", "hf mf nested", "hf mf hardnested",
-    "hf mf staticnested", "hf mf autopwn", "hf mfu info", "hf 14a info", "hf 14a list",
-    "hf 14a reader", "hf 15 info", "hf iclass info", "lf t55xx detect", "lf t55xx config",
-    "lf em 410x reader", "lf hid reader", "lf indala reader", "lf awid reader",
+    "hf mf staticnested", "hf mf autopwn", "hf mf rdbl", "hf mf rdsc", "hf mf dump",
+    "hf mfu info", "hf mfu rdbl", "hf mfu dump", "hf 14a info", "hf 14a list",
+    "hf 14a reader", "hf 14b info", "hf 14b reader", "hf 15 info", "hf 15 reader",
+    "hf 15 dump", "hf iclass info", "hf iclass reader", "hf iclass dump",
+    "lf t55xx detect", "lf t55xx config", "lf t55xx info", "lf t55xx dump", "lf t55xx trace",
+    "lf em 410x reader", "lf em 410x read", "lf hid reader", "lf hid read",
+    "lf indala reader", "lf awid reader", "lf search",
 )
-# ...o su última palabra es una de estas (p. ej. "... info", "... reader").
-SUFIJOS_LECTURA: frozenset[str] = frozenset({
-    "info", "reader", "read", "rdbl", "rdsc", "detect", "dump", "list",
-    "search", "help", "tune", "version", "status", "trace", "view", "config",
-})
 
 
 def _es_comando_lectura(comando_normalizado: str) -> bool:
-    if comando_normalizado.split()[-1] in SUFIJOS_LECTURA:
-        return True
     return any(
         comando_normalizado == prefijo or comando_normalizado.startswith(prefijo + " ")
         for prefijo in PREFIJOS_LECTURA
