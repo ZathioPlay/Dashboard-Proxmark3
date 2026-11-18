@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import asdict
 from typing import Any
 
+from pm3_dashboard.pm3 import decodificadores
 from pm3_dashboard.pm3.localizador import OrigenCliente, ResultadoBusqueda
 from pm3_dashboard.pm3.modelos import (
     EstadoEmulacion,
@@ -12,6 +13,7 @@ from pm3_dashboard.pm3.modelos import (
     MedicionAntena,
     Respuesta,
     TarjetaLeida,
+    Tecnologia,
     TipoTarjeta,
 )
 from pm3_dashboard.pm3.parsers import MINIMO_HF_V, MINIMO_LF_V
@@ -137,10 +139,49 @@ def resultado_importacion(resultado: ResultadoImportacion, archivo: str) -> dict
     return {"ok": True, "archivo": archivo, **asdict(resultado)}
 
 
+def _bloque_dict(bloque: Any, es_trailer: bool) -> dict[str, Any]:
+    return {
+        "indice": bloque.indice,
+        "datos": bloque.datos,
+        "leido": bloque.leido,
+        "ascii": decodificadores.ascii_de_hex(bloque.datos) if bloque.leido else "",
+        "es_trailer": es_trailer,
+    }
+
+
+def _sector_dict(sector: Any, tipo: TipoTarjeta, tecnologia: Tecnologia) -> dict[str, Any]:
+    datos = {
+        "indice": sector.indice,
+        "completo": sector.completo,
+        "clave_a": None,
+        "clave_b": None,
+        "accesos": None,
+        "bloques": [],
+    }
+    es_classic = tecnologia is Tecnologia.MIFARE_CLASSIC
+    indice_trailer = sector.bloques[-1].indice if sector.bloques else -1
+    for bloque in sector.bloques:
+        trailer = es_classic and bloque.indice == indice_trailer
+        datos["bloques"].append(_bloque_dict(bloque, trailer))
+
+    if es_classic and sector.bloques and sector.bloques[-1].leido:
+        trailer_hex = sector.bloques[-1].datos
+        datos["clave_a"], datos["clave_b"] = decodificadores.claves_de_trailer(trailer_hex)
+        # Los sectores grandes de 4K (16 bloques) no se interpretan aquí.
+        datos["accesos"] = None if len(sector.bloques) != 4 else decodificadores.accesos_de_trailer(trailer_hex)
+    return datos
+
+
 def volcado(guardado: VolcadoGuardado | None) -> dict[str, Any] | None:
     if guardado is None:
         return None
     v = guardado.volcado
+    paginas = [b.datos for sector in v.sectores for b in sector.bloques]
+    ndef = (
+        [asdict(r) for r in decodificadores.decodificar_ndef(paginas)]
+        if v.tecnologia is Tecnologia.MIFARE_ULTRALIGHT
+        else []
+    )
     return {
         "id": guardado.id,
         "fecha": guardado.fecha,
@@ -151,5 +192,6 @@ def volcado(guardado: VolcadoGuardado | None) -> dict[str, Any] | None:
         "bloques_leidos": v.bloques_leidos,
         "faltan_claves": v.faltan_claves,
         "completo": not v.faltan_claves,
-        "sectores": [asdict(sector) for sector in v.sectores],
+        "sectores": [_sector_dict(s, v.tipo, v.tecnologia) for s in v.sectores],
+        "ndef": ndef,
     }

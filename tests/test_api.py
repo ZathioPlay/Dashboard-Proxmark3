@@ -326,6 +326,9 @@ def test_solo_se_exponen_los_metodos_previstos(entorno: Entorno) -> None:
         "detener_emulacion",
         "estado_emulacion",
         "ejecutar_terminal",
+        "preparar_datos_bloque",
+        "escribir_bloque",
+        "leer_bloque",
     }
 
 
@@ -906,3 +909,164 @@ def test_terminal_lecturas_de_la_lista_blanca_corren_directas(entorno: Entorno, 
 
     assert resultado["ok"], comando
     assert entorno.lanzador.comandos == [comando]
+
+
+# ================================================================ escritura de bloques (4d)
+
+TRAILER_OK = "FFFFFFFFFFFFFF078069FFFFFFFFFFFF"       # bits de acceso coherentes (transporte)
+TRAILER_MALO = "FFFFFFFFFFFF112233690000000000000"[:32]  # bits de acceso incoherentes
+
+
+def test_preparar_datos_texto_a_hex(entorno: Entorno) -> None:
+    r = entorno.api.preparar_datos_bloque("mifare_classic", "Hola", es_texto=True)
+
+    assert r["ok"]
+    assert r["datos_hex"] == "486F6C61" + "00" * 12
+    assert r["ascii"].startswith("Hola")
+
+
+def test_preparar_datos_hex_invalido(entorno: Entorno) -> None:
+    r = entorno.api.preparar_datos_bloque("mifare_classic", "00 11 22", es_texto=False)
+
+    assert not r["ok"]
+    assert "16 bytes" in r["error"]
+
+
+def test_escribir_bloque_pide_confirmacion_y_no_ejecuta(entorno: Entorno) -> None:
+    id_tarjeta = _tarjeta_hf(entorno)
+
+    r = entorno.api.escribir_bloque(id_tarjeta, 1, "00" * 16)
+
+    assert r["requiere_confirmacion"] is True
+    assert r["datos_hex"] == "00" * 16
+    assert r["es_trailer"] is False
+    assert entorno.lanzador.llamadas == []  # nada llega al cliente sin confirmar
+
+
+def test_escribir_bloque_tras_confirmar(entorno: Entorno) -> None:
+    id_tarjeta = _tarjeta_hf(entorno)
+    entorno.lanzador.responder("hf mf wrbl --blk 1 -a -k FFFFFFFFFFFF -d " + "AB" * 16, stdout="[+] ok")
+
+    r = entorno.api.escribir_bloque(id_tarjeta, 1, "ab" * 16, confirmado=True)
+
+    assert r["ok"], r
+    assert "hf mf wrbl --blk 1 -a -k FFFFFFFFFFFF -d " + "AB" * 16 in entorno.lanzador.comandos
+    assert entorno.descripciones()[0] == "Escrito bloque 1 de «Oficina»"
+
+
+def test_escribir_texto_convertido_a_hex(entorno: Entorno) -> None:
+    id_tarjeta = _tarjeta_hf(entorno)
+    hex_esperado = "486F6C61" + "00" * 12
+    entorno.lanzador.responder(f"hf mf wrbl --blk 1 -a -k FFFFFFFFFFFF -d {hex_esperado}", stdout="[+] ok")
+
+    r = entorno.api.escribir_bloque(id_tarjeta, 1, "Hola", es_texto=True, confirmado=True)
+
+    assert r["ok"]
+    assert r["datos_hex"] == hex_esperado
+
+
+def test_escribir_datos_invalidos_no_llega_al_cliente(entorno: Entorno) -> None:
+    id_tarjeta = _tarjeta_hf(entorno)
+
+    corto = entorno.api.escribir_bloque(id_tarjeta, 1, "0011", confirmado=True)
+    no_hex = entorno.api.escribir_bloque(id_tarjeta, 1, "ZZ" + "00" * 15, confirmado=True)
+
+    assert not corto["ok"] and "16 bytes" in corto["error"]
+    assert not no_hex["ok"] and "hexadecimal" in no_hex["error"]
+    assert entorno.lanzador.llamadas == []
+
+
+def test_trailer_rechazado_sin_modo_experto(entorno: Entorno) -> None:
+    id_tarjeta = _tarjeta_hf(entorno)
+
+    r = entorno.api.escribir_bloque(id_tarjeta, 3, TRAILER_OK, confirmado=True)
+
+    assert not r["ok"]
+    assert r["es_trailer"] is True
+    assert "bloquear el sector" in r["error"].lower() or "para siempre" in r["error"].lower()
+    assert entorno.lanzador.llamadas == []
+
+
+def test_trailer_4k_tambien_protegido(entorno: Entorno) -> None:
+    id_tarjeta = _tarjeta_hf(entorno, tipo="MIFARE Classic 4K", uid="9E2B44C0")
+
+    r = entorno.api.escribir_bloque(id_tarjeta, 143, TRAILER_OK, confirmado=True)
+
+    assert not r["ok"] and r["es_trailer"] is True
+    assert entorno.lanzador.llamadas == []
+
+
+def test_trailer_experto_con_bits_coherentes_pide_confirmacion(entorno: Entorno) -> None:
+    id_tarjeta = _tarjeta_hf(entorno)
+
+    r = entorno.api.escribir_bloque(id_tarjeta, 3, TRAILER_OK, modo_experto=True)
+
+    assert r["requiere_confirmacion"] is True
+    assert r["es_trailer"] is True
+    assert r["accesos"] is not None  # se muestran los accesos que se van a grabar
+    assert entorno.lanzador.llamadas == []
+
+
+def test_trailer_con_bits_incoherentes_se_rechaza_aunque_experto_y_confirmado(entorno: Entorno) -> None:
+    id_tarjeta = _tarjeta_hf(entorno)
+
+    r = entorno.api.escribir_bloque(id_tarjeta, 3, TRAILER_MALO, modo_experto=True, confirmado=True)
+
+    assert not r["ok"]
+    assert r["es_trailer"] is True
+    assert "incoherentes" in r["error"]
+    assert entorno.lanzador.llamadas == []  # jamás se ejecuta
+
+
+def test_error_de_bloque_0_se_traduce(entorno: Entorno) -> None:
+    id_tarjeta = _tarjeta_hf(entorno)
+    entorno.lanzador.responder("hf mf wrbl --blk 0 -a -k FFFFFFFFFFFF -d " + "00" * 16, codigo=1, stderr="write failed")
+
+    r = entorno.api.escribir_bloque(id_tarjeta, 0, "00" * 16, confirmado=True)
+
+    assert not r["ok"]
+    assert "solo lectura salvo en tarjetas mágicas" in r["error"]
+
+
+def test_escribir_en_tarjeta_lf_se_rechaza(entorno: Entorno) -> None:
+    id_tarjeta = tarjetas.insertar_tarjeta(entorno.bd, NuevaTarjeta(nombre="Llavero", banda="lf", tipo="EM410x", uid="0F0368568B"))
+
+    r = entorno.api.escribir_bloque(id_tarjeta, 1, "00" * 16, confirmado=True)
+
+    assert not r["ok"]
+    assert entorno.lanzador.llamadas == []
+
+
+def test_leer_bloque_para_verificar(entorno: Entorno) -> None:
+    id_tarjeta = _tarjeta_hf(entorno)
+    entorno.lanzador.responder("hf mf rdbl --blk 1 -a -k FFFFFFFFFFFF", stdout="[=]   1 | AB CD EF 00 11 22 33 44 55 66 77 88 99 AA BB CC")
+
+    r = entorno.api.leer_bloque(id_tarjeta, 1)
+
+    assert r["ok"]
+    assert r["datos"].replace(" ", "").startswith("ABCDEF00")
+    assert r["ascii"]  # ASCII del bloque
+
+
+def test_volcado_enriquecido_tiene_ascii_claves_y_accesos(entorno: Entorno) -> None:
+    id_tarjeta = _tarjeta_hf(entorno)
+    entorno.lanzador.responder("hf mf dump", stdout=_muestra("hf_mf_dump_1k_completo"))
+    entorno.api.leer_bloques(id_tarjeta)
+
+    volcado = entorno.api.obtener_volcado(id_tarjeta)["volcado"]
+
+    sector0 = volcado["sectores"][0]
+    assert sector0["bloques"][0]["ascii"]  # columna ASCII presente
+    assert sector0["clave_a"] == "FFFFFFFFFFFF"
+    assert sector0["accesos"] is not None
+    assert sector0["bloques"][3]["es_trailer"] is True
+
+
+def test_volcado_ultralight_lleva_ndef(entorno: Entorno) -> None:
+    id_tarjeta = _tarjeta_hf(entorno, tipo="MIFARE Ultralight / NTAG", uid="04689571")
+    entorno.lanzador.responder("hf mfu dump", stdout=_muestra("hf_mfu_ntag_url"))
+    entorno.api.leer_bloques(id_tarjeta)
+
+    volcado = entorno.api.obtener_volcado(id_tarjeta)["volcado"]
+
+    assert volcado["ndef"] == [{"tipo": "uri", "contenido": "https://example.com"}]

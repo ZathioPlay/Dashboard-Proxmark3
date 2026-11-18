@@ -69,6 +69,10 @@ pm3-dashboard/
    clonado y emulación (volcado HF `hf mf dump` / `hf mfu dump`, recuperación de
    claves `hf mf autopwn`, clonado real de MIFARE Classic y emulación `sim`) y
    terminal (lista blanca de comandos de lectura; el resto pide confirmación).
+   Lectura enriquecida del volcado: ASCII, claves A/B por sector, bits de acceso
+   en palabras y registros NDEF (NTAG/Ultralight). Escritura de bloques en
+   **modo laboratorio** (`hf mf wrbl` / `hf mfu wrbl`) para tarjetas propias: ver
+   abajo las protecciones del trailer.
    Pendiente para esta fase:
    - Lectura de **HID Prox** en LF (`lf hid clone/sim -r <raw>`); en la fase 2
      solo se reconoce EM410x, igual que el prototipo.
@@ -84,10 +88,16 @@ pm3-dashboard/
 - Funciones pequeñas, con nombres claros y *type hints*.
 - Cada módulo nuevo de `pm3/` o `storage/` lleva sus tests.
 - La interfaz nunca ejecuta comandos directamente: siempre pasa por `api/`.
-- Toda acción que **escribe** en una tarjeta (clonar) pide confirmación al usuario.
-- Los comandos de clonado y emulación se generan siempre con `pm3/recetas.py` a
-  partir del UID/ID; nunca se ejecuta un comando guardado en la base de datos ni
-  importado de un archivo.
+- Toda acción que **escribe** en una tarjeta (clonar, escribir un bloque) pide
+  confirmación, comprobada en la `Api` (no solo en la interfaz).
+- Los comandos de clonado, emulación y escritura se generan siempre con
+  `pm3/recetas.py` a partir del UID/ID, el índice y los datos (validados como
+  hexadecimal y de longitud exacta); nunca se ejecuta una cadena guardada en la
+  base de datos ni importada de un archivo.
+- La **escritura de bloques** es para **tarjetas propias en laboratorio**. El
+  trailer de sector (claves y bits de acceso) se rechaza por defecto; solo se
+  permite en modo experto, y aun así se rechaza si los bits de acceso son
+  incoherentes (grabarlos puede bloquear el sector para siempre).
 - No hacer commits ni push sin que el usuario lo pida.
 - Uso legítimo: la herramienta es para auditar tarjetas propias o con
   autorización; mantener ese aviso visible en la app y en la documentación.

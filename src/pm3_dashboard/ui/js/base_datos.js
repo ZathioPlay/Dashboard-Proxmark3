@@ -108,6 +108,7 @@ async function verTarjeta(id) {
         const r = await api().obtener_volcado(id);
         volcado = r.ok ? r.volcado : null;
     }
+    volcadoMemoria = volcado;
     const memoria = esHF ? htmlPanelMemoria(tarjeta, volcado) : '';
 
     await abrirModal({
@@ -119,12 +120,27 @@ async function verTarjeta(id) {
     });
 }
 
-// ==================== VOLCADO Y CLONADO (dentro de la ficha) ====================
+// ==================== VOLCADO, CLONADO Y ESCRITURA (dentro de la ficha) ====================
+
+let volcadoMemoria = null;  // último volcado mostrado (para el editor de bloques)
 
 function engancharMemoria(cuerpo, tarjeta) {
     cuerpo.querySelector('[data-mem="leer"]')?.addEventListener('click', () => accionMemoria(cuerpo, tarjeta, 'leer'));
     cuerpo.querySelector('[data-mem="recuperar"]')?.addEventListener('click', () => accionMemoria(cuerpo, tarjeta, 'recuperar'));
     cuerpo.querySelector('[data-mem="clonar"]')?.addEventListener('click', () => clonar(cuerpo, tarjeta));
+    cuerpo.querySelector('[data-mem="laboratorio"]')?.addEventListener('change', (ev) => {
+        modoLaboratorio = ev.target.checked;
+        const tabla = cuerpo.querySelector('[data-mem="tabla"]');
+        if (tabla && volcadoMemoria) {
+            tabla.innerHTML = htmlTablaVolcado(volcadoMemoria);
+        }
+    });
+    cuerpo.querySelector('[data-mem="tabla"]')?.addEventListener('click', (ev) => {
+        const boton = ev.target.closest('button[data-editar]');
+        if (boton) {
+            editarBloque(cuerpo, tarjeta, Number(boton.dataset.editar));
+        }
+    });
 }
 
 function estadoMemoria(cuerpo, texto, tipo) {
@@ -136,9 +152,144 @@ function estadoMemoria(cuerpo, texto, tipo) {
 
 function repintarMemoria(cuerpo, tarjeta, volcado) {
     // Se sustituye el panel entero (botones, resumen y tabla) y se vuelve a enganchar.
+    volcadoMemoria = volcado;
     const panel = cuerpo.querySelector('[data-mem="estado"]').parentElement;
     panel.outerHTML = htmlPanelMemoria(tarjeta, volcado);
     engancharMemoria(cuerpo, tarjeta);
+}
+
+// ---------------------------------------------------------------- editor de bloques (modo laboratorio)
+
+function bloqueDelVolcado(indice) {
+    if (!volcadoMemoria) {
+        return null;
+    }
+    for (const sector of volcadoMemoria.sectores) {
+        const bloque = sector.bloques.find((b) => b.indice === indice);
+        if (bloque) {
+            return { bloque, sector };
+        }
+    }
+    return null;
+}
+
+function htmlEditorBloque(indice, sector, esTrailer, claveSugerida) {
+    return `
+        <div class="space-y-2">
+            <div class="font-bold text-slate-100">Editar bloque ${indice}${esTrailer ? ' (trailer)' : ''}</div>
+            ${esTrailer ? '<p class="text-rose-300">⚠ Es un trailer: unos bits de acceso incorrectos pueden bloquear el sector PARA SIEMPRE.</p>' : ''}
+            <div class="flex gap-3">
+                <label class="flex items-center gap-1"><input type="radio" name="ed-modo" value="texto" checked class="accent-cyan-500"> Texto</label>
+                <label class="flex items-center gap-1"><input type="radio" name="ed-modo" value="hex" class="accent-cyan-500"> Hex</label>
+            </div>
+            <input id="ed-datos" type="text" placeholder="texto o hex" class="w-full bg-cyber-950 border border-slate-700 rounded-lg px-2 py-1.5 font-mono text-slate-200 focus:outline-none focus:border-cyan-500">
+            <div class="flex items-center gap-2">
+                <span class="text-slate-500">Clave:</span>
+                <input id="ed-clave" type="text" value="${escaparHtml(claveSugerida)}" maxlength="12" class="w-40 bg-cyber-950 border border-slate-700 rounded-lg px-2 py-1 font-mono text-slate-200 focus:outline-none focus:border-cyan-500">
+                <select id="ed-tipoclave" class="bg-cyber-950 border border-slate-700 rounded-lg px-2 py-1 text-slate-200">
+                    <option value="a">Clave A</option><option value="b">Clave B</option>
+                </select>
+            </div>
+            ${esTrailer ? `<label class="flex items-center gap-2 text-rose-300"><input id="ed-experto" type="checkbox" class="accent-rose-500"> Modo experto: permitir escribir el trailer</label>` : ''}
+            <div id="ed-previo" class="text-[11px] font-mono text-slate-400"></div>
+            <div id="ed-estado" class="hidden rounded-lg p-2"></div>
+            <div class="flex justify-end gap-2">
+                <button data-ed="cancelar" class="px-3 py-1.5 bg-cyber-800 hover:bg-slate-700 border border-slate-700 text-slate-200 font-semibold rounded-lg">Cancelar</button>
+                <button data-ed="escribir" class="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white font-semibold rounded-lg">Escribir…</button>
+            </div>
+        </div>`;
+}
+
+function editarBloque(cuerpo, tarjeta, indice) {
+    const info = bloqueDelVolcado(indice);
+    const esTrailer = info ? info.bloque.es_trailer : false;
+    const claveSugerida = (info && info.sector.clave_a && info.sector.clave_a !== '000000000000') ? info.sector.clave_a : 'FFFFFFFFFFFF';
+    const caja = cuerpo.querySelector('[data-mem="estado"]');
+    caja.className = `rounded-lg p-3 text-xs ${CLASES_MENSAJE.aviso}`;
+    caja.classList.remove('hidden');
+    caja.innerHTML = htmlEditorBloque(indice, info ? info.sector : null, esTrailer, claveSugerida);
+
+    const datos = () => cuerpo.querySelector('#ed-datos').value;
+    const esTexto = () => cuerpo.querySelector('input[name="ed-modo"]:checked').value === 'texto';
+    const clave = () => cuerpo.querySelector('#ed-clave').value;
+    const usarB = () => cuerpo.querySelector('#ed-tipoclave').value === 'b';
+    const experto = () => Boolean(cuerpo.querySelector('#ed-experto')?.checked);
+    const edEstado = (texto, tipo) => {
+        const e = cuerpo.querySelector('#ed-estado');
+        e.className = `rounded-lg p-2 ${CLASES_MENSAJE[tipo]}`;
+        e.innerHTML = texto;
+        e.classList.toggle('hidden', !texto);
+    };
+
+    // Previsualización texto->hex en vivo.
+    async function previsualizar() {
+        try {
+            const r = await api().preparar_datos_bloque(volcadoMemoria.tecnologia, datos(), esTexto());
+            cuerpo.querySelector('#ed-previo').textContent = r.ok ? `Hex final: ${r.datos_hex}  ·  ASCII: ${r.ascii}` : r.error;
+        } catch (error) { /* ignora */ }
+    }
+    cuerpo.querySelector('#ed-datos').addEventListener('input', previsualizar);
+    cuerpo.querySelectorAll('input[name="ed-modo"]').forEach((r) => r.addEventListener('change', previsualizar));
+
+    caja.querySelector('[data-ed="cancelar"]').addEventListener('click', () => estadoMemoria(cuerpo, '', 'aviso'));
+    caja.querySelector('[data-ed="escribir"]').addEventListener('click', async () => {
+        const params = { es_texto: esTexto(), clave: clave(), usar_clave_b: usarB(), modo_experto: experto() };
+        try {
+            const r = await api().escribir_bloque(tarjeta.id, indice, datos(), params.es_texto, params.clave, params.usar_clave_b, params.modo_experto, false);
+            if (r.requiere_confirmacion) {
+                confirmarEscritura(cuerpo, tarjeta, indice, datos(), params, r, edEstado);
+            } else if (!r.ok) {
+                edEstado(escaparHtml(r.error), 'error');
+            }
+        } catch (error) {
+            edEstado(`Error: ${escaparHtml(textoError(error))}`, 'error');
+        }
+    });
+}
+
+function confirmarEscritura(cuerpo, tarjeta, indice, datosOriginales, params, previo, edEstado) {
+    const accesos = previo.accesos
+        ? `<div class="mt-1">Accesos que se grabarán:<ul class="list-disc list-inside">${previo.accesos.map((a) => `<li>${escaparHtml(a)}</li>`).join('')}</ul></div>`
+        : '';
+    edEstado(`
+        <div class="space-y-2">
+            <p>Se va a <strong class="text-white">escribir</strong> el bloque ${indice}: <span class="font-mono">${escaparHtml(previo.datos_hex)}</span></p>
+            ${previo.es_trailer ? '<p class="text-rose-300">⚠ Es un trailer. Revisa bien los accesos antes de continuar.</p>' : ''}
+            ${previo.es_bloque0 ? '<p class="text-amber-300">El bloque 0 solo es escribible en tarjetas mágicas.</p>' : ''}
+            ${accesos}
+            <p>${escaparHtml(AVISO_USO)}</p>
+            <div class="flex justify-end gap-2">
+                <button data-conf="cancelar" class="px-3 py-1.5 bg-cyber-800 hover:bg-slate-700 border border-slate-700 text-slate-200 font-semibold rounded-lg">Cancelar</button>
+                <button data-conf="ok" class="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white font-semibold rounded-lg">Sí, escribir</button>
+            </div>
+        </div>`, 'aviso');
+    cuerpo.querySelector('[data-conf="cancelar"]').addEventListener('click', () => edEstado('', 'aviso'));
+    cuerpo.querySelector('[data-conf="ok"]').addEventListener('click', async () => {
+        edEstado('Escribiendo…', 'aviso');
+        try {
+            const r = await api().escribir_bloque(tarjeta.id, indice, datosOriginales, params.es_texto, params.clave, params.usar_clave_b, params.modo_experto, true);
+            if (r.ok) {
+                edEstado(`Bloque ${indice} escrito. <button data-conf="releer" class="underline text-cyan-300">Releer para verificar</button>`, 'ok');
+                cuerpo.querySelector('[data-conf="releer"]').addEventListener('click', () => releerBloque(cuerpo, tarjeta, indice, params, edEstado));
+                cargarResumen();
+            } else {
+                edEstado(escaparHtml(r.error), 'error');
+            }
+        } catch (error) {
+            edEstado(`Error: ${escaparHtml(textoError(error))}`, 'error');
+        }
+    });
+}
+
+async function releerBloque(cuerpo, tarjeta, indice, params, edEstado) {
+    try {
+        const r = await api().leer_bloque(tarjeta.id, indice, params.clave, params.usar_clave_b);
+        edEstado(r.ok
+            ? `Bloque ${indice} leído: <span class="font-mono">${escaparHtml(r.datos)}</span> · ASCII: ${escaparHtml(r.ascii)}`
+            : escaparHtml(r.error), r.ok ? 'ok' : 'error');
+    } catch (error) {
+        edEstado(`Error: ${escaparHtml(textoError(error))}`, 'error');
+    }
 }
 
 async function accionMemoria(cuerpo, tarjeta, accion) {

@@ -19,6 +19,7 @@ class TipoActividad(StrEnum):
     EMULACION = "emulacion"
     CONEXION = "conexion"
     CLONADO = "clonado"
+    ESCRITURA = "escritura"
     BORRADO = "borrado"
     IMPORTACION = "importacion"
     EXPORTACION = "exportacion"

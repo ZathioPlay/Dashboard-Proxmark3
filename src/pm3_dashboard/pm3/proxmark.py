@@ -15,16 +15,19 @@ from pm3_dashboard.pm3.modelos import (
     Respuesta,
     ResultadoComando,
     TarjetaLeida,
+    Tecnologia,
     TipoTarjeta,
     Volcado,
 )
 from pm3_dashboard.pm3.parsers import (
+    parsear_bloque,
     parsear_hf_search,
     parsear_hw_tune,
     parsear_hw_version,
     parsear_lf_search,
     parsear_volcado,
 )
+from pm3_dashboard.pm3 import recetas
 from pm3_dashboard.pm3.recetas import receta_hf, receta_lf
 
 BANDAS = ("auto", "hf", "lf")
@@ -32,6 +35,7 @@ MSG_SIN_TARJETA = "No se detectó ninguna tarjeta sobre la antena de Proxmark3."
 MSG_SOLO_HF = "Solo se puede volcar la memoria de tarjetas HF."
 
 TIMEOUT_VOLCADO = 60.0
+TIMEOUT_ESCRITURA = 20.0
 # autopwn prueba miles de claves; en el peor caso tarda varios minutos.
 TIMEOUT_AUTOPWN = 600.0
 
@@ -132,6 +136,27 @@ class Proxmark3:
         if not res.ok:
             return Respuesta(ok=False, error=res.error, salida=res.salida, puerto=res.puerto)
         return Respuesta(ok=True, datos=parsear_volcado(res.salida, tipo_tarjeta), salida=res.salida, puerto=res.puerto)
+
+    def escribir_bloque(
+        self, tecnologia: str, indice: int, datos_hex: str, clave: str, usar_clave_b: bool = False
+    ) -> ResultadoComando:
+        """Escribe un bloque. El comando lo genera y valida recetas.py (nunca una cadena guardada)."""
+        comando = recetas.comando_escribir_bloque(tecnologia, indice, datos_hex, clave, usar_clave_b)
+        return self.cliente.ejecutar(comando, timeout=TIMEOUT_ESCRITURA)
+
+    def leer_bloque(
+        self, tecnologia: str, indice: int, clave: str, usar_clave_b: bool = False
+    ) -> Respuesta[str]:
+        """Relee un solo bloque (para verificar una escritura). datos = hex del bloque."""
+        tec = Tecnologia(tecnologia)
+        comando = recetas.comando_leer_bloque(tec, indice, clave, usar_clave_b)
+        res = self.cliente.ejecutar(comando, timeout=TIMEOUT_VOLCADO)
+        if not res.ok:
+            return Respuesta(ok=False, error=res.error, salida=res.salida, puerto=res.puerto)
+        datos = parsear_bloque(res.salida, recetas.bytes_por_bloque(tec))
+        if datos is None:
+            return Respuesta(ok=False, error="No se pudo leer el bloque.", salida=res.salida, puerto=res.puerto)
+        return Respuesta(ok=True, datos=datos, salida=res.salida, puerto=res.puerto)
 
     def ejecutar(self, comando: str, timeout: float = 15.0) -> ResultadoComando:
         """Comando libre (clonado generado por recetas.py, futura terminal)."""

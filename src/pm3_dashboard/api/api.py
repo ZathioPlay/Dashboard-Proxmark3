@@ -20,9 +20,9 @@ from typing import Any
 from pm3_dashboard import paths
 from pm3_dashboard.api import conversion
 from pm3_dashboard.api.dialogos import Dialogos, DialogosPywebview
-from pm3_dashboard.pm3 import Proxmark3, recetas
+from pm3_dashboard.pm3 import Proxmark3, decodificadores, recetas
 from pm3_dashboard.pm3.cliente import MSG_EMULACION, MSG_OCUPADA
-from pm3_dashboard.pm3.modelos import Banda, Respuesta, TarjetaLeida, Volcado
+from pm3_dashboard.pm3.modelos import Banda, Respuesta, TarjetaLeida, TipoTarjeta, Volcado
 from pm3_dashboard.storage import BaseDatos, DatosNoValidos, ErrorBaseDatos
 from pm3_dashboard.storage import actividad, antenas, intercambio, tarjetas, volcados
 from pm3_dashboard.storage.actividad import TipoActividad
@@ -211,6 +211,35 @@ class Api:
     def clonar_tarjeta(self, id_tarjeta: int) -> dict[str, Any]:
         """Clona a una tarjeta mágica usando el volcado guardado. ESCRITURA (se confirma en la interfaz)."""
         return self._seguro(lambda: self._clonar_tarjeta(id_tarjeta))
+
+    # ================================================================ escritura de bloques (laboratorio)
+    def preparar_datos_bloque(self, tecnologia: str, datos: str, es_texto: bool = False) -> dict[str, Any]:
+        """Ayuda texto->hex: devuelve el hex final (relleno/truncado) sin escribir nada."""
+        return self._seguro(lambda: self._preparar_datos_bloque(tecnologia, datos, es_texto))
+
+    def escribir_bloque(
+        self,
+        id_tarjeta: int,
+        indice: int,
+        datos: str,
+        es_texto: bool = False,
+        clave: str = recetas.CLAVE_POR_DEFECTO,
+        usar_clave_b: bool = False,
+        modo_experto: bool = False,
+        confirmado: bool = False,
+    ) -> dict[str, Any]:
+        """Escribe un bloque (laboratorio, tarjetas propias). ESCRITURA: valida y confirma en la Api."""
+        return self._seguro(
+            lambda: self._escribir_bloque(
+                id_tarjeta, indice, datos, es_texto, clave, usar_clave_b, modo_experto, confirmado
+            )
+        )
+
+    def leer_bloque(
+        self, id_tarjeta: int, indice: int, clave: str = recetas.CLAVE_POR_DEFECTO, usar_clave_b: bool = False
+    ) -> dict[str, Any]:
+        """Relee un solo bloque para verificar una escritura."""
+        return self._seguro(lambda: self._leer_bloque(id_tarjeta, indice, clave, usar_clave_b))
 
     # ================================================================ antenas
     def listar_mediciones(self, limite: int = 10) -> dict[str, Any]:
@@ -489,6 +518,126 @@ class Api:
             self._bd, TipoActividad.CLONADO, f"Clonada «{tarjeta.nombre}» ({tarjeta.tipo}, {tarjeta.uid})"
         )
         return {"ok": True, "salida": res.salida}
+
+    # ---------------------------------------------------------------- escritura de bloques
+    def _tecnologia(self, tipo: str) -> Tecnologia:
+        if tipo in (TipoTarjeta.MIFARE_CLASSIC_1K, TipoTarjeta.MIFARE_CLASSIC_4K):
+            return Tecnologia.MIFARE_CLASSIC
+        if tipo == TipoTarjeta.ULTRALIGHT_NTAG:
+            return Tecnologia.MIFARE_ULTRALIGHT
+        raise ErrorEntrada("La escritura de bloques solo está disponible para MIFARE Classic y Ultralight / NTAG.")
+
+    def _hex_bloque(self, tecnologia: Tecnologia, datos: object, es_texto: object) -> str:
+        """Hex final del bloque a partir de texto (texto->hex) o de hex (validado)."""
+        texto = _texto(datos, "datos")
+        if bool(es_texto):
+            return recetas.texto_a_hex(texto, recetas.bytes_por_bloque(tecnologia))
+        return recetas.normalizar_datos_bloque(tecnologia, texto)
+
+    def _preparar_datos_bloque(self, tecnologia: object, datos: object, es_texto: object) -> dict[str, Any]:
+        try:
+            tec = Tecnologia(_texto(tecnologia, "tecnologia"))
+        except ValueError:
+            return {"ok": False, "error": "Tecnología no válida."}
+        try:
+            hexa = self._hex_bloque(tec, datos, es_texto)
+        except ValueError as exc:
+            return {"ok": False, "error": str(exc)}
+        return {"ok": True, "datos_hex": hexa, "ascii": decodificadores.ascii_de_hex(hexa)}
+
+    def _escribir_bloque(
+        self,
+        id_tarjeta: object,
+        indice: object,
+        datos: object,
+        es_texto: object,
+        clave: object,
+        usar_clave_b: object,
+        modo_experto: object,
+        confirmado: object,
+    ) -> dict[str, Any]:
+        tarjeta = self._tarjeta_hf(id_tarjeta)
+        tecnologia = self._tecnologia(tarjeta.tipo)
+        bloque = _entero(indice, "bloque")
+        clave_texto = _texto(clave, "clave")
+        try:
+            datos_hex = self._hex_bloque(tecnologia, datos, es_texto)
+        except ValueError as exc:
+            return {"ok": False, "error": str(exc)}
+
+        trailer = recetas.es_trailer(bloque, tarjeta.tipo)
+        if trailer and not bool(modo_experto):
+            return {
+                "ok": False,
+                "es_trailer": True,
+                "error": "Escribir el trailer puede bloquear el sector PARA SIEMPRE si los bits de acceso "
+                "son incorrectos. Actívalo en el modo experto solo si sabes lo que haces.",
+            }
+        # Refuerzo: aunque sea experto y esté confirmado, un trailer con bits de
+        # acceso incoherentes se rechaza (grabarlo bloquearía el sector para siempre).
+        accesos = None
+        if trailer:
+            if not decodificadores.accesos_coherentes(datos_hex):
+                return {
+                    "ok": False,
+                    "es_trailer": True,
+                    "error": "Los bits de acceso del trailer son incoherentes; grabarlos bloquearía el "
+                    "sector para siempre. Revisa los bytes 6 a 8.",
+                }
+            accesos = decodificadores.accesos_de_trailer(datos_hex)
+
+        # Confirmación obligatoria (misma política que la 4b, comprobada aquí).
+        if not bool(confirmado):
+            return {
+                "ok": False,
+                "requiere_confirmacion": True,
+                "bloque": bloque,
+                "datos_hex": datos_hex,
+                "ascii": decodificadores.ascii_de_hex(datos_hex),
+                "es_trailer": trailer,
+                "es_bloque0": bloque == 0,
+                "accesos": accesos,
+                "aviso": "Escribe solo en tarjetas propias o con autorización.",
+            }
+
+        try:
+            res = self._proxmark.escribir_bloque(
+                tecnologia.value, bloque, datos_hex, clave_texto, bool(usar_clave_b)
+            )
+        except ValueError as exc:
+            return {"ok": False, "error": str(exc)}
+
+        if not res.ok:
+            if bloque == 0:
+                return {
+                    "ok": False,
+                    "error": "No se pudo escribir el bloque 0. El bloque 0 (UID del fabricante) es de solo "
+                    "lectura salvo en tarjetas mágicas (Gen1a / Gen2).",
+                    "salida": res.salida,
+                }
+            return {"ok": False, "error": res.error or "No se pudo escribir el bloque.", "salida": res.salida}
+
+        actividad.registrar(
+            self._bd, TipoActividad.ESCRITURA, f"Escrito bloque {bloque} de «{tarjeta.nombre}»"
+        )
+        return {"ok": True, "bloque": bloque, "datos_hex": datos_hex, "salida": res.salida}
+
+    def _leer_bloque(self, id_tarjeta: object, indice: object, clave: object, usar_clave_b: object) -> dict[str, Any]:
+        tarjeta = self._tarjeta_hf(id_tarjeta)
+        tecnologia = self._tecnologia(tarjeta.tipo)
+        bloque = _entero(indice, "bloque")
+        try:
+            respuesta = self._proxmark.leer_bloque(tecnologia.value, bloque, _texto(clave, "clave"), bool(usar_clave_b))
+        except ValueError as exc:
+            return {"ok": False, "error": str(exc)}
+        if not respuesta.ok or respuesta.datos is None:
+            return {"ok": False, "error": respuesta.error or "No se pudo leer el bloque.", "salida": respuesta.salida}
+        return {
+            "ok": True,
+            "bloque": bloque,
+            "datos": respuesta.datos,
+            "ascii": decodificadores.ascii_de_hex(respuesta.datos),
+        }
 
     # ---------------------------------------------------------------- antenas
     def _listar_mediciones(self, limite: object) -> dict[str, Any]:

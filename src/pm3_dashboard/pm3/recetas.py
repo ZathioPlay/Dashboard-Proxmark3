@@ -16,13 +16,20 @@ from pm3_dashboard.pm3.modelos import (
     TarjetaHF,
     TarjetaLeida,
     TarjetaLF,
+    Tecnologia,
     TipoTarjeta,
 )
 
 ATQA_POR_DEFECTO = "00 04"
 SAK_POR_DEFECTO = "08"
+CLAVE_POR_DEFECTO = "FFFFFFFFFFFF"
 
 _RE_HEX = re.compile(r"[0-9A-F]+")
+
+BYTES_POR_BLOQUE = {
+    Tecnologia.MIFARE_CLASSIC: 16,
+    Tecnologia.MIFARE_ULTRALIGHT: 4,
+}
 
 
 def _uid_compacto(uid: str) -> str:
@@ -113,3 +120,93 @@ def receta_lf(tarjeta: TarjetaLF, salida: str, fecha: str) -> TarjetaLeida:
         salida=salida.strip(),
         derivados=derivados(TipoTarjeta.EM410X, tarjeta.id_em),
     )
+
+
+# ---------------------------------------------------------------------------
+# Escritura de bloques (laboratorio): comandos validados a partir de datos puros
+# ---------------------------------------------------------------------------
+def _hex_exacto(valor: str, n_bytes: int, nombre: str) -> str:
+    """Normaliza a hex en mayúsculas sin espacios y exige la longitud exacta.
+
+    Lanza ValueError si no es hexadecimal o no mide n_bytes. Es la barrera de
+    seguridad: lo que va dentro de un comando solo puede ser hexadecimal.
+    """
+    compacto = "".join(valor.split()).upper()
+    if not _RE_HEX.fullmatch(compacto):
+        raise ValueError(f"{nombre}: solo se admiten dígitos hexadecimales.")
+    if len(compacto) != n_bytes * 2:
+        raise ValueError(f"{nombre}: deben ser exactamente {n_bytes} bytes ({n_bytes * 2} dígitos hex).")
+    return compacto
+
+
+def bytes_por_bloque(tecnologia: Tecnologia) -> int:
+    return BYTES_POR_BLOQUE[Tecnologia(tecnologia)]
+
+
+def normalizar_datos_bloque(tecnologia: Tecnologia, datos_hex: str) -> str:
+    """Valida los datos de un bloque (hex y longitud exacta) y los devuelve compactos."""
+    return _hex_exacto(datos_hex, BYTES_POR_BLOQUE[Tecnologia(tecnologia)], "Datos del bloque")
+
+
+def es_trailer(indice: int, tipo: TipoTarjeta) -> bool:
+    """¿El bloque es un trailer de sector (guarda claves y bits de acceso)?
+
+    1K: un trailer cada 4 bloques (3, 7, ..., 63).
+    4K: los sectores 0-31 son de 4 bloques (trailer en %4==3) y los sectores
+    32-39 son de 16 bloques (trailer en 143, 159, ..., 255).
+    """
+    tipo = TipoTarjeta(tipo)
+    if tipo not in (TipoTarjeta.MIFARE_CLASSIC_1K, TipoTarjeta.MIFARE_CLASSIC_4K):
+        return False
+    if indice < 128:
+        return indice % 4 == 3
+    return (indice - 128) % 16 == 15
+
+
+def texto_a_hex(texto: str, n_bytes: int) -> str:
+    """Convierte texto a hex (UTF-8), rellenando con 00 o truncando a n_bytes.
+
+    Devuelve el hex compacto en mayúsculas, para mostrarlo antes de escribir.
+    """
+    crudo = texto.encode("utf-8")[:n_bytes].ljust(n_bytes, b"\x00")
+    return crudo.hex().upper()
+
+
+def _indice_valido(indice: int) -> int:
+    if not isinstance(indice, int) or isinstance(indice, bool) or indice < 0:
+        raise ValueError("El número de bloque debe ser un entero no negativo.")
+    return indice
+
+
+def comando_escribir_bloque(
+    tecnologia: Tecnologia,
+    indice: int,
+    datos_hex: str,
+    clave: str = CLAVE_POR_DEFECTO,
+    usar_clave_b: bool = False,
+) -> str:
+    """Comando para escribir un bloque. Valida datos (hex y longitud exacta) y clave."""
+    tecnologia = Tecnologia(tecnologia)
+    indice = _indice_valido(indice)
+    datos = _hex_exacto(datos_hex, BYTES_POR_BLOQUE[tecnologia], "Datos del bloque")
+    if tecnologia is Tecnologia.MIFARE_ULTRALIGHT:
+        return f"hf mfu wrbl -b {indice} -d {datos}"
+    clave_hex = _hex_exacto(clave, 6, "Clave")
+    tipo_clave = "-b" if usar_clave_b else "-a"
+    return f"hf mf wrbl --blk {indice} {tipo_clave} -k {clave_hex} -d {datos}"
+
+
+def comando_leer_bloque(
+    tecnologia: Tecnologia,
+    indice: int,
+    clave: str = CLAVE_POR_DEFECTO,
+    usar_clave_b: bool = False,
+) -> str:
+    """Comando para releer un solo bloque y verificar una escritura."""
+    tecnologia = Tecnologia(tecnologia)
+    indice = _indice_valido(indice)
+    if tecnologia is Tecnologia.MIFARE_ULTRALIGHT:
+        return f"hf mfu rdbl -b {indice}"
+    clave_hex = _hex_exacto(clave, 6, "Clave")
+    tipo_clave = "-b" if usar_clave_b else "-a"
+    return f"hf mf rdbl --blk {indice} {tipo_clave} -k {clave_hex}"

@@ -131,3 +131,87 @@ def test_nombre_archivo_volcado_rechaza_uid_manipulado(uid: str) -> None:
     # Nunca debe producir un nombre con separadores de ruta: el UID se valida como hex.
     with pytest.raises(ValueError):
         nombre_archivo_volcado(uid)
+
+
+# ---------------------------------------------------------------- escritura de bloques
+
+from pm3_dashboard.pm3.modelos import Tecnologia  # noqa: E402
+from pm3_dashboard.pm3.recetas import (  # noqa: E402
+    comando_escribir_bloque,
+    comando_leer_bloque,
+    es_trailer,
+    texto_a_hex,
+)
+
+CLASSIC = Tecnologia.MIFARE_CLASSIC
+ULTRA = Tecnologia.MIFARE_ULTRALIGHT
+
+
+def test_comando_escribir_classic() -> None:
+    cmd = comando_escribir_bloque(CLASSIC, 1, "00112233445566778899AABBCCDDEEFF")
+    assert cmd == "hf mf wrbl --blk 1 -a -k FFFFFFFFFFFF -d 00112233445566778899AABBCCDDEEFF"
+
+
+def test_comando_escribir_classic_clave_b() -> None:
+    cmd = comando_escribir_bloque(CLASSIC, 5, "aa" * 16, clave="a0a1a2a3a4a5", usar_clave_b=True)
+    assert cmd == "hf mf wrbl --blk 5 -b -k A0A1A2A3A4A5 -d " + "AA" * 16
+
+
+def test_comando_escribir_ultralight() -> None:
+    assert comando_escribir_bloque(ULTRA, 4, "04 68 95 71") == "hf mfu wrbl -b 4 -d 04689571"
+
+
+def test_comando_leer_bloque() -> None:
+    assert comando_leer_bloque(CLASSIC, 2) == "hf mf rdbl --blk 2 -a -k FFFFFFFFFFFF"
+    assert comando_leer_bloque(ULTRA, 4) == "hf mfu rdbl -b 4"
+
+
+@pytest.mark.parametrize(
+    ("tec", "datos"),
+    [
+        (CLASSIC, "00112233"),                 # muy corto
+        (CLASSIC, "00" * 17),                  # muy largo
+        (CLASSIC, "ZZ" + "00" * 15),           # no hexadecimal
+        (ULTRA, "0011223344"),                 # 5 bytes en vez de 4
+        (ULTRA, "GG001122"),                   # no hexadecimal
+    ],
+)
+def test_escribir_rechaza_datos_invalidos(tec: Tecnologia, datos: str) -> None:
+    with pytest.raises(ValueError):
+        comando_escribir_bloque(tec, 1, datos)
+
+
+def test_escribir_rechaza_clave_invalida() -> None:
+    with pytest.raises(ValueError):
+        comando_escribir_bloque(CLASSIC, 1, "00" * 16, clave="123")
+
+
+def test_escribir_rechaza_indice_negativo() -> None:
+    with pytest.raises(ValueError):
+        comando_escribir_bloque(CLASSIC, -1, "00" * 16)
+
+
+@pytest.mark.parametrize(
+    ("indice", "tipo", "esperado"),
+    [
+        (3, TipoTarjeta.MIFARE_CLASSIC_1K, True),
+        (7, TipoTarjeta.MIFARE_CLASSIC_1K, True),
+        (63, TipoTarjeta.MIFARE_CLASSIC_1K, True),
+        (4, TipoTarjeta.MIFARE_CLASSIC_1K, False),
+        (0, TipoTarjeta.MIFARE_CLASSIC_1K, False),
+        (3, TipoTarjeta.MIFARE_CLASSIC_4K, True),
+        (143, TipoTarjeta.MIFARE_CLASSIC_4K, True),   # trailer de sector grande de 4K
+        (159, TipoTarjeta.MIFARE_CLASSIC_4K, True),
+        (255, TipoTarjeta.MIFARE_CLASSIC_4K, True),
+        (140, TipoTarjeta.MIFARE_CLASSIC_4K, False),
+        (4, TipoTarjeta.ULTRALIGHT_NTAG, False),      # Ultralight no tiene trailers
+    ],
+)
+def test_es_trailer_1k_y_4k(indice: int, tipo: TipoTarjeta, esperado: bool) -> None:
+    assert es_trailer(indice, tipo) is esperado
+
+
+def test_texto_a_hex_rellena_y_trunca() -> None:
+    assert texto_a_hex("Hola", 16) == "486F6C61" + "00" * 12
+    assert texto_a_hex("Hola", 4) == "486F6C61"
+    assert texto_a_hex("larguísimo", 4) == "6C617267"  # truncado a 4 bytes

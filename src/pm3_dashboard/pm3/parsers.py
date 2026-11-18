@@ -291,3 +291,11 @@ def parsear_volcado(texto: str, tipo: TipoTarjeta) -> Volcado:
     if tipo is TipoTarjeta.ULTRALIGHT_NTAG:
         return parsear_hf_mfu_dump(texto)
     return parsear_hf_mf_dump(texto, tipo)
+
+
+def parsear_bloque(texto: str, bytes_por_bloque: int) -> str | None:
+    """Datos del primer bloque de la salida de 'rdbl' (para verificar una escritura), o None."""
+    leidos = _bloques_leidos(limpiar_salida(texto), bytes_por_bloque)
+    if not leidos:
+        return None
+    return leidos[min(leidos)]
