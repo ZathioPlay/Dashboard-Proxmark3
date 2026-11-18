@@ -168,10 +168,17 @@ class Api:
         respuesta = self._proxmark.estado()
         if not respuesta.ok and respuesta.error in MENSAJES_OCUPADA:
             # Ocupada (midiendo, emulando...) significa conectada: se mantiene lo último conocido.
-            anterior = self._estado or {**conversion.estado(Respuesta(ok=True)), "puerto": respuesta.puerto}
+            anterior = self._estado or {
+                **conversion.estado(Respuesta(ok=True)),
+                "puerto": respuesta.puerto,
+                "cliente_iceman": conversion.cliente_iceman(self._proxmark.buscar_cliente()),
+            }
             return {"ok": True, **anterior, "ocupado": True}
 
         estado = conversion.estado(respuesta)
+        # Qué cliente se usa y de dónde sale, también sin Proxmark conectada.
+        version = conversion.version_corta(respuesta.datos.cliente) if respuesta.datos else ""
+        estado["cliente_iceman"] = conversion.cliente_iceman(self._proxmark.buscar_cliente(), version)
         self._guardar_estado(estado)
         return {"ok": True, **estado}
 
@@ -187,6 +194,11 @@ class Api:
         estado = None
         if cambio == "desaparece":
             estado = conversion.estado_desconectado("Se ha desconectado la Proxmark3. Vuelve a conectarla por USB.")
+            # El cliente sigue siendo el mismo: se conserva su versión conocida.
+            anterior = (self._estado or {}).get("cliente_iceman") or {}
+            estado["cliente_iceman"] = conversion.cliente_iceman(
+                self._proxmark.buscar_cliente(), anterior.get("version", "")
+            )
             self._guardar_estado(estado)
         return {"ok": True, "presente": presente, "puerto": puerto, "cambio": cambio, "estado": estado}
 

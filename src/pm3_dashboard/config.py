@@ -8,8 +8,9 @@ Ejemplo de config.json:
       "rutas_extra": ["C:/ProxSpace/msys2/mingw64/bin", "C:/ProxSpace/msys2/usr/bin"]
     }
 
-- ruta_cliente: vacío = el cliente incluido con la app. Relativa = desde la
-  carpeta de la app.
+- ruta_cliente: vacío = se busca automáticamente (incluido con la app,
+  ~/proxmark3, ProxSpace, PATH; ver pm3/localizador.py). Si se indica, tiene
+  prioridad absoluta. Relativa = desde la carpeta de la app.
 - puerto: "auto" para detectarlo, o "COM3", "COM4"...
 - rutas_extra: carpetas que se añaden al PATH al lanzar el cliente (DLL).
 
@@ -83,10 +84,13 @@ def _resolver(ruta_texto: str) -> Path:
     return ruta if ruta.is_absolute() else (paths.carpeta_app() / ruta).resolve()
 
 
-def resolver_ruta_cliente(config: ConfigPm3) -> Path:
-    """Ruta absoluta de proxmark3.exe."""
+def resolver_ruta_configurada(config: ConfigPm3) -> Path | None:
+    """Ruta absoluta del cliente indicada en la configuración, o None si no hay ninguna.
+
+    Si es None, pm3/localizador.py busca el cliente automáticamente.
+    """
     if not config.ruta_cliente.strip():
-        return paths.ruta_cliente_por_defecto()
+        return None
     return _resolver(config.ruta_cliente)
 
 

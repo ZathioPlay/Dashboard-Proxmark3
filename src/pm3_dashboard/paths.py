@@ -40,14 +40,15 @@ def carpeta_app() -> Path:
 
 
 def ruta_cliente_por_defecto() -> Path:
-    """proxmark3.exe incluido con la app.
+    """Cliente de Iceman incluido con la app (proxmark3.exe en Windows, proxmark3 en Linux/Mac).
 
     Empaquetada: <carpeta del .exe>\\pm3-client (lo instala Inno Setup).
     Desarrollo: vendor/pm3-client.
     """
+    ejecutable = "proxmark3.exe" if sys.platform == "win32" else "proxmark3"
     if esta_empaquetada():
-        return carpeta_app() / "pm3-client" / "proxmark3.exe"
-    return carpeta_app() / "vendor" / "pm3-client" / "proxmark3.exe"
+        return carpeta_app() / "pm3-client" / ejecutable
+    return carpeta_app() / "vendor" / "pm3-client" / ejecutable
 
 
 def carpeta_ui() -> Path:

@@ -44,6 +44,35 @@ function pintarEstado(estado) {
     mostrar('aviso-dispositivo', !estado.conectado);
     ponerTexto('aviso-version-texto', estado.aviso_version || '');
     mostrar('aviso-version', Boolean(estado.conectado && estado.aviso_version));
+    if ('cliente_iceman' in estado) {
+        pintarClienteIceman(estado.cliente_iceman, estado.version_firmware);
+    }
+}
+
+const CLASES_ORIGEN_CLIENTE = {
+    incluido:    'bg-emerald-500/15 text-emerald-300',
+    configurado: 'bg-cyan-500/15 text-cyan-300',
+    sistema:     'bg-amber-500/15 text-amber-300',
+};
+
+/** Caja del menú lateral: qué binario se usa (ruta completa), de dónde sale y versiones. */
+function pintarClienteIceman(cliente, versionFirmware) {
+    const origen = $('cliente-origen');
+    if (!cliente) {
+        origen.className = 'px-1.5 py-0.5 rounded font-mono text-[10px] bg-rose-500/15 text-rose-300';
+        origen.textContent = 'NO ENCONTRADO';
+        ponerTexto('cliente-version', '—');
+        ponerTexto('cliente-firmware', '—');
+        ponerTexto('cliente-ruta', 'Ningún proxmark3.exe disponible. Mira el aviso del panel de Inicio.');
+        return;
+    }
+    origen.className = `px-1.5 py-0.5 rounded font-mono text-[10px] ${CLASES_ORIGEN_CLIENTE[cliente.origen] || 'bg-slate-800 text-slate-400'}`;
+    // "Sistema · ProxSpace", "Incluido", "Configurado"
+    origen.textContent = cliente.origen === 'sistema' ? `${cliente.etiqueta} · ${cliente.detalle}` : cliente.etiqueta;
+    origen.title = cliente.detalle;
+    ponerTexto('cliente-version', cliente.version || '—');
+    ponerTexto('cliente-firmware', versionFirmware || '—');
+    ponerTexto('cliente-ruta', cliente.ruta); // siempre completa, para ver qué binario se usa
 }
 
 // ==================== RESUMEN (BASE DE DATOS) ====================

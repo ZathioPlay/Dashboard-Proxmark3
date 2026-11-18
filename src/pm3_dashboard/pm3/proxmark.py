@@ -7,6 +7,7 @@ from datetime import date
 
 from pm3_dashboard.pm3.cliente import ClientePm3
 from pm3_dashboard.pm3.emulacion import GestorEmulacion
+from pm3_dashboard.pm3.localizador import ResultadoBusqueda
 from pm3_dashboard.pm3.modelos import (
     EstadoEmulacion,
     InfoVersion,
@@ -43,6 +44,10 @@ class Proxmark3:
         self.cliente = cliente or ClientePm3()
         self.emulacion = GestorEmulacion(self.cliente, espera_inicial=espera_emulacion)
         self._hoy = hoy
+
+    def buscar_cliente(self) -> ResultadoBusqueda:
+        """Qué cliente de Iceman se usa y de dónde sale (no ejecuta nada)."""
+        return self.cliente.buscar_cliente()
 
     def puerto_presente(self) -> str | None:
         """Comprobación ligera de conexión (no lanza 'hw version')."""

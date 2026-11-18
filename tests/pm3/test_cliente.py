@@ -14,6 +14,7 @@ from pm3_dashboard.pm3.cliente import (
     TiempoAgotado,
     construir_entorno,
 )
+from pm3_dashboard.pm3.localizador import OrigenCliente, ResultadoBusqueda, UbicacionCliente
 from tests.pm3.falsos import LanzadorFalso, cargar_muestra
 
 
@@ -82,6 +83,50 @@ def test_cliente_inexistente_no_lanza_nada(lanzador: LanzadorFalso, tmp_path: Pa
     assert not resultado.ok
     assert "No se encuentra el cliente de Iceman" in resultado.error
     assert lanzador.llamadas == []
+
+
+def test_sin_cliente_en_ningun_sitio(config: ConfigPm3, lanzador: LanzadorFalso, tmp_path: Path) -> None:
+    cliente = ClientePm3(
+        cargar=lambda: ConfigPm3(puerto="COM5"),
+        lanzador=lanzador,
+        localizar=lambda _: ResultadoBusqueda(None, ("vendor\\pm3-client", "PATH")),
+        carpeta_trabajo=tmp_path,
+    )
+
+    resultado = cliente.ejecutar("hw version")
+
+    assert not resultado.ok
+    assert resultado.error.startswith("No se encuentra el cliente de Iceman")
+    assert "Se ha buscado en: vendor\\pm3-client, PATH" in resultado.error
+    assert lanzador.llamadas == []
+
+
+def test_usa_el_cliente_localizado_y_sus_dll(lanzador: LanzadorFalso, tmp_path: Path) -> None:
+    detectado = tmp_path / "ProxSpace" / "pm3" / "proxmark3" / "client" / "proxmark3.exe"
+    dlls = tmp_path / "ProxSpace" / "msys2" / "mingw64" / "bin"
+    extra_config = tmp_path / "extra"
+    ubicacion = UbicacionCliente(detectado, OrigenCliente.SISTEMA, "ProxSpace", (dlls,))
+    capturado: dict = {}
+
+    class LanzadorQueMiraElEntorno(LanzadorFalso):
+        def ejecutar(self, argv, *, timeout, env, cwd):  # type: ignore[override]
+            capturado["env"] = env
+            return super().ejecutar(argv, timeout=timeout, env=env, cwd=cwd)
+
+    lanzador_env = LanzadorQueMiraElEntorno()
+    cliente = ClientePm3(
+        cargar=lambda: ConfigPm3(puerto="COM5", rutas_extra=[str(extra_config)]),
+        lanzador=lanzador_env,
+        localizar=lambda _: ResultadoBusqueda(ubicacion),
+        carpeta_trabajo=tmp_path,
+    )
+
+    assert cliente.ejecutar("hw version").ok
+    assert lanzador_env.llamadas[0][0] == str(detectado)
+    rutas = capturado["env"]["PATH"].split(os.pathsep)
+    # Carpeta del cliente, luego las de config.json y después las DLL de ProxSpace.
+    assert rutas[:3] == [str(detectado.parent), str(extra_config), str(dlls)]
+    assert cliente.buscar_cliente().ubicacion == ubicacion
 
 
 def test_sin_proxmark_conectada(config: ConfigPm3, lanzador: LanzadorFalso, tmp_path: Path) -> None:

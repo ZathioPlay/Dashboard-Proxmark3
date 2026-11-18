@@ -75,7 +75,22 @@
                 <!-- Botones generados por app.js a partir de SECCIONES -->
             </nav>
 
-            <div class="mt-auto pt-4 border-t border-slate-800/80">
+            <div class="mt-auto pt-4 border-t border-slate-800/80 space-y-2">
+                <!-- Qué cliente de Iceman se usa y de dónde sale (lo rellena inicio.js) -->
+                <div class="p-3 rounded-xl bg-cyber-950 border border-slate-800/80 text-[11px] space-y-1.5">
+                    <div class="flex items-center justify-between gap-2">
+                        <span class="font-mono text-slate-500">CLIENTE DE ICEMAN</span>
+                        <span id="cliente-origen" class="px-1.5 py-0.5 rounded font-mono text-[10px] bg-slate-800 text-slate-400">…</span>
+                    </div>
+                    <div class="flex justify-between gap-2 text-slate-300">
+                        <span>Cliente:</span><span id="cliente-version" class="font-mono text-cyan-400 text-right">—</span>
+                    </div>
+                    <div class="flex justify-between gap-2 text-slate-300">
+                        <span>Firmware:</span><span id="cliente-firmware" class="font-mono text-cyan-400 text-right">—</span>
+                    </div>
+                    <div id="cliente-ruta" class="font-mono text-[10px] text-slate-500 break-all leading-snug select-text">Buscando…</div>
+                </div>
+
                 <div class="p-3 rounded-xl bg-cyber-950 border border-slate-800/80 text-[11px] text-slate-400 leading-relaxed">
                     <div class="font-mono text-slate-500 mb-1">USO LEGÍTIMO</div>
                     Usa esta herramienta solo con tarjetas propias o con autorización expresa de su titular.

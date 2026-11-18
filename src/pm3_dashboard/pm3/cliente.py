@@ -21,7 +21,8 @@ from pathlib import Path
 from typing import IO, Protocol
 
 from pm3_dashboard import paths
-from pm3_dashboard.config import ConfigPm3, cargar_config, resolver_ruta_cliente, resolver_rutas_extra
+from pm3_dashboard.config import ConfigPm3, cargar_config, resolver_ruta_configurada, resolver_rutas_extra
+from pm3_dashboard.pm3.localizador import ResultadoBusqueda, localizar_cliente, mensaje_no_encontrado
 from pm3_dashboard.pm3.modelos import ResultadoComando
 from pm3_dashboard.pm3.puerto import detectar_puerto, puerto_presente
 from pm3_dashboard.pm3.salida import interpretar_salida, limpiar_salida
@@ -116,6 +117,16 @@ class LanzadorSubprocess:
 # ---------------------------------------------------------------------------
 # Preparación (ruta del cliente, puerto y entorno)
 # ---------------------------------------------------------------------------
+def buscar_cliente_en_sistema(config: ConfigPm3) -> ResultadoBusqueda:
+    """Localiza el cliente con los datos reales del sistema (ver pm3/localizador.py)."""
+    return localizar_cliente(
+        resolver_ruta_configurada(config),
+        paths.ruta_cliente_por_defecto(),
+        home=Path.home(),
+        path_sistema=os.environ.get("PATH", ""),
+    )
+
+
 def construir_entorno(
     cliente: Path, rutas_extra: Sequence[Path], base: Mapping[str, str]
 ) -> dict[str, str]:
@@ -219,7 +230,9 @@ class ClientePm3:
         detectar: Callable[[str], str | None] = detectar_puerto,
         carpeta_trabajo: Path | None = None,
         presencia: Callable[[str], str | None] = puerto_presente,
+        localizar: Callable[[ConfigPm3], ResultadoBusqueda] | None = None,
     ) -> None:
+        self._localizar = localizar or buscar_cliente_en_sistema
         # La configuración se lee en cada comando: así se puede cambiar sin reiniciar.
         self._cargar = cargar
         self._lanzador: Lanzador = lanzador or LanzadorSubprocess()
@@ -285,22 +298,26 @@ class ClientePm3:
         self._sesion = SesionProceso(proceso, prep.puerto, al_terminar=self._cerrojo.release)
         return self._sesion
 
+    def buscar_cliente(self) -> ResultadoBusqueda:
+        """Qué cliente de Iceman se usaría y de dónde sale (no ejecuta nada)."""
+        return self._localizar(self._cargar())
+
     def _preparar(self) -> _Preparacion:
         config = self._cargar()
-        cliente = resolver_ruta_cliente(config)
-        if not cliente.is_file():
-            raise ErrorPm3(
-                f"No se encuentra el cliente de Iceman en {cliente}. "
-                "Revisa 'ruta_cliente' en la configuración (config.json)."
-            )
+        busqueda = self._localizar(config)
+        if busqueda.ubicacion is None:
+            raise ErrorPm3(mensaje_no_encontrado(busqueda))
+        ubicacion = busqueda.ubicacion
         puerto = self._detectar(config.puerto)
         if not puerto:
             raise ErrorPm3(
                 "No se detecta ninguna Proxmark3 conectada por USB. "
                 "Conéctala o indica el puerto en la configuración (config.json)."
             )
-        env = construir_entorno(cliente, resolver_rutas_extra(config), os.environ)
-        return _Preparacion(cliente=cliente, puerto=puerto, env=env)
+        # Primero las carpetas de config.json; después las que necesita el cliente detectado (DLL de ProxSpace).
+        rutas_extra = [*resolver_rutas_extra(config), *ubicacion.rutas_extra]
+        env = construir_entorno(ubicacion.ruta, rutas_extra, os.environ)
+        return _Preparacion(cliente=ubicacion.ruta, puerto=puerto, env=env)
 
     def _cwd(self) -> Path:
         if self._carpeta_trabajo is None:

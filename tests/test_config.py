@@ -12,7 +12,7 @@ from pm3_dashboard.config import (
     ConfigPm3,
     cargar_config,
     guardar_config,
-    resolver_ruta_cliente,
+    resolver_ruta_configurada,
     resolver_rutas_extra,
 )
 
@@ -73,12 +73,20 @@ def test_guardar_y_cargar(appdata_temporal: Path) -> None:
     assert cargar_config() == original
 
 
-def test_ruta_cliente_vacia_usa_la_incluida_con_la_app() -> None:
-    assert resolver_ruta_cliente(ConfigPm3()) == paths.ruta_cliente_por_defecto()
+def test_ruta_cliente_vacia_no_esta_configurada() -> None:
+    # Sin ruta, el cliente se busca automáticamente (pm3/localizador.py).
+    assert resolver_ruta_configurada(ConfigPm3()) is None
+    assert resolver_ruta_configurada(ConfigPm3(ruta_cliente="   ")) is None
 
 
 def test_rutas_relativas_desde_la_carpeta_de_la_app() -> None:
     config = ConfigPm3(ruta_cliente="otro/proxmark3.exe", rutas_extra=["dlls"])
 
-    assert resolver_ruta_cliente(config) == (paths.carpeta_app() / "otro" / "proxmark3.exe").resolve()
+    assert resolver_ruta_configurada(config) == (paths.carpeta_app() / "otro" / "proxmark3.exe").resolve()
     assert resolver_rutas_extra(config) == [(paths.carpeta_app() / "dlls").resolve()]
+
+
+def test_ruta_configurada_absoluta(tmp_path: Path) -> None:
+    ruta = tmp_path / "pm3" / "proxmark3.exe"
+
+    assert resolver_ruta_configurada(ConfigPm3(ruta_cliente=str(ruta))) == ruta

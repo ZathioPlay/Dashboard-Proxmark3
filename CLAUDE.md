@@ -30,6 +30,7 @@ Ese proyecto es **solo de consulta**: no se modifica desde aquí.
 | Base de datos | SQLite (`sqlite3` de la librería estándar), en `%APPDATA%\PM3-Dashboard\pm3.db` |
 | Configuración | `%APPDATA%\PM3-Dashboard\config.json` (ruta del cliente, puerto "auto" o COMx) |
 | Proxmark3 | Se controla lanzando el cliente de Iceman con `subprocess`; un único acceso al puerto a la vez |
+| Cliente de Iceman | Se localiza con `pm3/localizador.py` en este orden: `ruta_cliente` de config.json (prioridad absoluta: si no existe, error), incluido con la app (`vendor/pm3-client` o `pm3-client\` junto al `.exe`), `~/proxmark3`, ProxSpace y PATH (solo entradas absolutas, nunca el directorio actual) |
 | Tests | `pytest`; la lógica de la Proxmark se prueba con un cliente falso, nunca con hardware real |
 | Empaquetado | PyInstaller (un `.exe`) + Inno Setup (instalador) |
 | Usuarios | Sin login en la v1: es una app local de un solo usuario |

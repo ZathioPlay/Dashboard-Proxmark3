@@ -12,6 +12,7 @@ import pytest
 from pm3_dashboard.api import Api
 from pm3_dashboard.config import ConfigPm3
 from pm3_dashboard.pm3 import ClientePm3, Proxmark3
+from pm3_dashboard.pm3.localizador import OrigenCliente, ResultadoBusqueda, UbicacionCliente
 from pm3_dashboard.storage import BaseDatos, actividad, tarjetas
 from pm3_dashboard.storage.actividad import TipoActividad
 from pm3_dashboard.storage.tarjetas import NuevaTarjeta
@@ -41,6 +42,7 @@ class Entorno:
         ejecutable = tmp_path / "cliente" / "proxmark3.exe"
         ejecutable.parent.mkdir()
         ejecutable.touch()
+        self.ejecutable = ejecutable
         config = ConfigPm3(ruta_cliente=str(ejecutable), puerto="auto")
         self.conectada = True
         self.lanzador = LanzadorFalso()
@@ -110,6 +112,65 @@ def test_estado_conectado(entorno: Entorno) -> None:
     assert estado["version_firmware"] == "v4.18994-48-gd2e0a3b4d"
     assert estado["aviso_version"] == ""
     assert entorno.descripciones() == ["Proxmark3 conectada en COM5 (firmware v4.18994-48-gd2e0a3b4d)"]
+
+
+def test_estado_dice_que_cliente_se_usa_y_de_donde_sale(entorno: Entorno) -> None:
+    estado = entorno.api.obtener_estado_dispositivo()
+
+    assert estado["cliente_iceman"] == {
+        "ruta": str(entorno.ejecutable),
+        "origen": "configurado",
+        "etiqueta": "Configurado",
+        "detalle": "config.json",
+        "version": "v4.18994-48-gd2e0a3b4d",
+    }
+
+
+def test_cliente_detectado_en_el_sistema_aunque_no_haya_proxmark(tmp_path: Path) -> None:
+    detectado = tmp_path / "ProxSpace" / "pm3" / "proxmark3" / "client" / "proxmark3.exe"
+    cliente = ClientePm3(
+        cargar=lambda: ConfigPm3(puerto="auto"),
+        lanzador=LanzadorFalso(),
+        detectar=lambda _: None,
+        presencia=lambda _: None,
+        localizar=lambda _: ResultadoBusqueda(UbicacionCliente(detectado, OrigenCliente.SISTEMA, "ProxSpace")),
+        carpeta_trabajo=tmp_path / "dumps",
+    )
+    api = Api(proxmark=Proxmark3(cliente=cliente), bd=BaseDatos(tmp_path / "pm3.db"))
+
+    estado = api.obtener_estado_dispositivo()
+
+    assert not estado["conectado"]
+    assert "No se detecta ninguna Proxmark3" in estado["mensaje"]
+    assert estado["cliente_iceman"]["ruta"] == str(detectado)
+    assert estado["cliente_iceman"]["etiqueta"] == "Sistema"
+    assert estado["cliente_iceman"]["detalle"] == "ProxSpace"
+    assert estado["cliente_iceman"]["version"] == ""  # sin Proxmark no se ha lanzado hw version
+
+
+def test_sin_cliente_en_ningun_sitio(tmp_path: Path) -> None:
+    cliente = ClientePm3(
+        cargar=lambda: ConfigPm3(puerto="COM5"),
+        lanzador=LanzadorFalso(),
+        localizar=lambda _: ResultadoBusqueda(None, ("vendor\\pm3-client", "PATH")),
+        carpeta_trabajo=tmp_path / "dumps",
+    )
+    api = Api(proxmark=Proxmark3(cliente=cliente), bd=BaseDatos(tmp_path / "pm3.db"))
+
+    estado = api.obtener_estado_dispositivo()
+
+    assert not estado["conectado"]
+    assert estado["mensaje"].startswith("No se encuentra el cliente de Iceman")
+    assert estado["cliente_iceman"] is None
+
+
+def test_al_desconectarse_se_conserva_el_cliente(entorno: Entorno) -> None:
+    entorno.api.obtener_estado_dispositivo()
+    entorno.conectada = False
+
+    desaparece = entorno.api.comprobar_conexion()
+
+    assert desaparece["estado"]["cliente_iceman"]["version"] == "v4.18994-48-gd2e0a3b4d"
 
 
 def test_sin_proxmark_mensaje_claro_y_datos_de_la_bd(entorno: Entorno) -> None:

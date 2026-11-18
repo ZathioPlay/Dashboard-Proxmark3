@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import asdict
 from typing import Any
 
+from pm3_dashboard.pm3.localizador import OrigenCliente, ResultadoBusqueda
 from pm3_dashboard.pm3.modelos import (
     InfoVersion,
     MedicionAntena,
@@ -57,6 +58,27 @@ def estado(respuesta: Respuesta[InfoVersion]) -> dict[str, Any]:
 
 def estado_desconectado(mensaje: str) -> dict[str, Any]:
     return estado(Respuesta(ok=False, error=mensaje))
+
+
+ETIQUETAS_ORIGEN = {
+    OrigenCliente.CONFIGURADO: "Configurado",
+    OrigenCliente.INCLUIDO: "Incluido",
+    OrigenCliente.SISTEMA: "Sistema",
+}
+
+
+def cliente_iceman(busqueda: ResultadoBusqueda, version_cliente: str = "") -> dict[str, Any] | None:
+    """Qué cliente se usa y de dónde sale; None si no se ha encontrado ninguno."""
+    ubicacion = busqueda.ubicacion
+    if ubicacion is None:
+        return None
+    return {
+        "ruta": str(ubicacion.ruta),
+        "origen": ubicacion.origen.value,
+        "etiqueta": ETIQUETAS_ORIGEN[ubicacion.origen],
+        "detalle": ubicacion.detalle,
+        "version": version_cliente,
+    }
 
 
 # ---------------------------------------------------------------------------
