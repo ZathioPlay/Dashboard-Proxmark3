@@ -1,0 +1,35 @@
+/* Estilos propios que no cubre Tailwind (heredados del prototipo rfid-clone). */
+
+/* Fuentes de reserva si no cargan Inter / JetBrains Mono (sin internet). */
+body {
+    font-family: "Inter", "Segoe UI", system-ui, sans-serif;
+}
+
+.font-mono {
+    font-family: "JetBrains Mono", Consolas, "Courier New", monospace;
+}
+
+/* Barra de desplazamiento */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+::-webkit-scrollbar-track {
+    background: #06090f;
+}
+::-webkit-scrollbar-thumb {
+    background: #1c2842;
+    border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: #06b6d4;
+}
+
+/* Onda de radiofrecuencia */
+@keyframes pulse-ring {
+    0% { transform: scale(0.8); opacity: 0.8; }
+    100% { transform: scale(2.2); opacity: 0; }
+}
+.rf-wave {
+    animation: pulse-ring 1.8s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+}

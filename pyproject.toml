@@ -1,0 +1,14 @@
+[project]
+name = "pm3-dashboard"
+version = "0.1.0"
+description = "Dashboard de escritorio para usar la Proxmark3 (Iceman/RRG) sin consola"
+requires-python = ">=3.11"
+authors = [{ name = "Daniel Pérez" }, { name = "Pedro Smith" }]
+dependencies = ["pywebview>=5.0"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "pyinstaller>=6.0"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

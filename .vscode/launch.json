@@ -1,0 +1,30 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "PM3 Dashboard",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "pm3_dashboard",
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/src"
+            },
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
+            "name": "Pytest (todos los tests)",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "pytest",
+            "args": ["-v"],
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/src"
+            },
+            "console": "integratedTerminal",
+            "justMyCode": false
+        }
+    ]
+}

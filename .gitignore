@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Empaquetado
+build/
+dist/
+*.spec.bak
+installer/Output/
+
+# Cliente de Iceman (se descarga aparte, no se sube)
+vendor/pm3-client/*
+!vendor/pm3-client/LEEME.md
+
+# Datos locales de pruebas
+*.db
+*.sqlite3
+dumps/
+
+# Tailwind compilado (se genera con scripts/)
+src/pm3_dashboard/ui/css/app.css
+
+# Sistema / editor
+.DS_Store
+Thumbs.db
