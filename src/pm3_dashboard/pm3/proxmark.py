@@ -44,6 +44,10 @@ class Proxmark3:
         self.emulacion = GestorEmulacion(self.cliente, espera_inicial=espera_emulacion)
         self._hoy = hoy
 
+    def puerto_presente(self) -> str | None:
+        """Comprobación ligera de conexión (no lanza 'hw version')."""
+        return self.cliente.puerto_presente()
+
     def estado(self) -> Respuesta[InfoVersion]:
         """Comprueba la conexión con 'hw version'."""
         res = self.cliente.ejecutar("hw version", timeout=20)

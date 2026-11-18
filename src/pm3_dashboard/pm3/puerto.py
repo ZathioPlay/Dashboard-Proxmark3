@@ -106,3 +106,46 @@ def detectar_puerto(puerto_config: str | None, detectores: Sequence[Detector] | 
         if encontrado:
             return encontrado
     return None
+
+
+# ---------------------------------------------------------------------------
+# Comprobación ligera de presencia (no abre el puerto ni lanza el cliente)
+# ---------------------------------------------------------------------------
+def puertos_presentes() -> set[str] | None:
+    """Puertos serie presentes ahora (en mayúsculas), o None si no se puede saber."""
+    try:
+        from serial.tools import list_ports  # pyright: ignore[reportMissingImports]
+    except ImportError:
+        pass
+    else:
+        return {str(p.device).upper() for p in list_ports.comports()}
+    if sys.platform == "win32":
+        try:
+            import winreg
+
+            return _puertos_serie_conectados(winreg)
+        except OSError:
+            return None
+    return None
+
+
+def puerto_presente(
+    puerto_config: str | None,
+    detectores: Sequence[Detector] | None = None,
+    presentes: Callable[[], set[str] | None] = puertos_presentes,
+) -> str | None:
+    """Puerto de la Proxmark3 si ahora mismo está conectada, o None.
+
+    Con "auto" se usa la detección por VID/PID. Con un puerto fijo se mira si
+    existe; si el sistema no permite saberlo, se da por presente.
+    """
+    puerto = (puerto_config or "auto").strip()
+    if puerto.lower() == "auto":
+        return detectar_puerto("auto", detectores)
+    try:
+        lista = presentes()
+    except Exception:
+        lista = None
+    if lista is None or puerto.upper() in lista:
+        return puerto
+    return None
