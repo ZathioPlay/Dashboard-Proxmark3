@@ -1,0 +1,39 @@
+[usb] pm3 --> hw version
+
+ [ Proxmark3 RFID instrument ]
+
+ [ CLIENT ]
+  client: RRG/Iceman/master/v4.18994-48-gd2e0a3b4d 2024-07-21 15:02:39 3b5d4fc4c
+  compiled with............. MinGW-w64 13.2.0
+  platform.................. Windows (64b) / x86_64
+  Readline support.......... present
+  QT GUI support............ present
+  native BT support......... present
+  Python script support..... present
+  Lua SWIG support.......... present
+  Python SWIG support....... present
+
+ [ PROXMARK3 ]
+  device.................... RDV4
+  firmware.................. RDV4
+  external flash............ present
+  smartcard reader.......... present
+  FPC USART for BT add-on... absent
+
+ [ ARM ]
+  bootrom: RRG/Iceman/master/v4.18994-48-gd2e0a3b4d 2024-07-21 15:03:21 3b5d4fc4c
+       os: RRG/Iceman/master/v4.18994-48-gd2e0a3b4d 2024-07-21 15:03:29 3b5d4fc4c
+  compiled with GCC 13.2.1 20231009
+
+ [ FPGA ]
+  LF image 2s30vq100 2024-07-21 15:03:34
+  HF image 2s30vq100 2024-07-21 15:03:36
+  HF FeliCa image 2s30vq100 2024-07-21 15:03:37
+  HF 15 image 2s30vq100 2024-07-21 15:03:38
+
+ [ Hardware ]
+  --= uC: AT91SAM7S512 Rev B
+  --= Embedded Processor: ARM7TDMI
+  --= Internal SRAM size: 64K bytes
+  --= Architecture identifier: AT91SAM7Sxx Series
+  --= Embedded flash memory 512K bytes ( 59% used )

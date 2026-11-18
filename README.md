@@ -26,10 +26,13 @@ En desarrollo. Evolución del prototipo web `TFG-proxmark3/rfid-clone`.
 ```powershell
 py -m venv .venv
 .venv\Scripts\activate
-pip install -r requirements-dev.txt
-python -m pm3_dashboard
+pip install -r requirements-dev.txt   # incluye "pip install -e ." del proyecto
+python -m pm3_dashboard               # o: pm3-dashboard
 pytest
 ```
+
+El proyecto queda instalado en modo editable, así que no hace falta configurar
+`PYTHONPATH`. En VS Code basta con pulsar F5 (configuración "PM3 Dashboard").
 
 Estructura y decisiones técnicas: ver [CLAUDE.md](CLAUDE.md) y [docs/](docs/).
 

@@ -1,0 +1,22 @@
+[usb] pm3 --> hw tune
+[=] ---------- Reminder ------------------------
+[=] `hw tune` doesn't actively tune your antennas.
+[=] It's only informative.
+[=] Measuring antenna characteristics...
+[=] -------- LF Antenna ----------
+[+] LF antenna: 44.28 V - 125.00 kHz
+[+] LF antenna: 41.33 V - 134.83 kHz
+[+] LF optimal: 45.71 V - 130.43 kHz
+[+] Approx. Q factor measurement
+[+] Peak voltage.......... 8.1
+[+] LF antenna ( ok )
+[=] -------- HF Antenna ----------
+[+] HF antenna: 31.40 V - 13.56 MHz
+[+] Approx. Q factor measurement
+[+] peak voltage.......... 7.2
+[+] HF antenna ( ok )
+[=] -------- LF tuning graph ---------
+[=] Orange line - divisor 95 / 125 kHz
+[=] Blue line - divisor 88 / 134 kHz
+[=] Q factor must be measured without tag on the antenna
+[=] Done.

@@ -1,0 +1,11 @@
+[usb] pm3 --> lf search
+[=] NOTE: some demods output possible binary
+[=] Checking for known tags...
+[+] EM410x pattern found
+
+EM TAG ID      : 1A2B3C4D5E
+
+Possible de-scramble patterns
+Unique TAG ID      : 58D43CB27A
+
+[+] Valid EM410x ID found!

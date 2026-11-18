@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "pm3-dashboard"
 version = "0.1.0"
@@ -9,6 +13,18 @@ dependencies = ["pywebview>=5.0"]
 [project.optional-dependencies]
 dev = ["pytest>=8.0", "pyinstaller>=6.0"]
 
+[project.scripts]
+pm3-dashboard = "pm3_dashboard.__main__:main"
+
+# Distribución "src layout": el código está en src/pm3_dashboard.
+[tool.setuptools.packages.find]
+where = ["src"]
+
+# La interfaz (HTML, JS, CSS, imágenes) forma parte del paquete.
+[tool.setuptools.package-data]
+pm3_dashboard = ["ui/**/*"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Permite ejecutar pytest aunque no se haya hecho "pip install -e .".
 pythonpath = ["src"]

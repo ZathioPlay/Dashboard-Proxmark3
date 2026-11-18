@@ -1,0 +1,16 @@
+[usb] pm3 --> lf search
+
+[=] NOTE: some demods output possible binary
+[=] if it finds something that looks like a tag
+[=] False Positives ARE possible
+[=] 
+[=] Checking for known tags...
+[=] 
+[+] EM 410x ID 0F0368568B
+[+] EM410x ( RF/64 )
+[=] -------- Possible de Bruijn sequence ---------
+[=] Only 2 sequences...
+[+] Valid EM410x ID found!
+
+[+] Chipset detection: T55xx
+[?] Hint: try `lf t55xx` commands

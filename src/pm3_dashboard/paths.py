@@ -28,6 +28,28 @@ def carpeta_paquete() -> Path:
     return Path(__file__).resolve().parent
 
 
+def carpeta_app() -> Path:
+    """Carpeta base de la aplicación.
+
+    En desarrollo es la raíz del proyecto; empaquetada, la carpeta del .exe.
+    Las rutas relativas de la configuración se resuelven desde aquí.
+    """
+    if esta_empaquetada():
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parents[2]
+
+
+def ruta_cliente_por_defecto() -> Path:
+    """proxmark3.exe incluido con la app.
+
+    Empaquetada: <carpeta del .exe>\\pm3-client (lo instala Inno Setup).
+    Desarrollo: vendor/pm3-client.
+    """
+    if esta_empaquetada():
+        return carpeta_app() / "pm3-client" / "proxmark3.exe"
+    return carpeta_app() / "vendor" / "pm3-client" / "proxmark3.exe"
+
+
 def carpeta_ui() -> Path:
     """Carpeta con index.html, css/, js/ y assets/."""
     return carpeta_paquete() / "ui"
@@ -55,3 +77,10 @@ def ruta_bd() -> Path:
 def ruta_config() -> Path:
     """Ruta del fichero de configuración."""
     return carpeta_datos() / "config.json"
+
+
+def carpeta_dumps() -> Path:
+    """Carpeta de trabajo del cliente de Iceman (ahí guarda .bin/.json/.eml)."""
+    carpeta = carpeta_datos() / "dumps"
+    carpeta.mkdir(parents=True, exist_ok=True)
+    return carpeta

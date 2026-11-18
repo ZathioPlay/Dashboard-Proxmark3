@@ -10,3 +10,4 @@ Sirve directamente para el apartado de justificación de la memoria.
 | 2026-11-18 | Sin login en la v1 | App local de un solo usuario |
 | 2026-11-18 | Servidor (torre vieja) como fase opcional | El TFG no depende de él; posible sincronización o copias de seguridad al final |
 | 2026-11-18 | Tailwind y fuentes por CDN solo en la fase 1 | Avanzar rápido con la interfaz; en la fase 5 se compila Tailwind en local y se incluyen las fuentes para que funcione sin internet |
+| 2026-11-18 | Cliente de Iceman en `pm3-client\` junto al `.exe`, instalado por Inno Setup, y no dentro del `.exe` de PyInstaller | Arranque más rápido (PyInstaller no tiene que descomprimir el cliente y sus DLL en cada ejecución); se puede actualizar el cliente sin recompilar la app; el cliente (GPLv3) queda como programa separado, con su licencia, en lugar de mezclado dentro de nuestro ejecutable |

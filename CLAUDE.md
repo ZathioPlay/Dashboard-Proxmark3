@@ -63,6 +63,9 @@ pm3-dashboard/
    última medición de antenas, nº de tarjetas por banda, actividad reciente.
 4. **Secciones**: antenas (`hw tune`), lectura, base de datos de tarjetas
    (CRUD, búsqueda, exportar/importar JSON), clonado y emulación, terminal.
+   Pendiente para esta fase:
+   - Lectura de **HID Prox** en LF (`lf hid clone/sim -r <raw>`); en la fase 2
+     solo se reconoce EM410x, igual que el prototipo.
 5. **Distribución**: Tailwind local, PyInstaller, instalador con Inno Setup.
 
 ## Normas de trabajo
@@ -81,7 +84,12 @@ pm3-dashboard/
 ```powershell
 py -m venv .venv
 .venv\Scripts\activate
-pip install -r requirements-dev.txt
-python -m pm3_dashboard        # ejecutar la app (con src en el PYTHONPATH, ver pyproject)
-pytest                         # tests
+pip install -r requirements-dev.txt   # dependencias + "pip install -e ." del proyecto
+python -m pm3_dashboard               # ejecutar la app (o simplemente: pm3-dashboard)
+pytest                                # tests
 ```
+
+El proyecto se instala en modo editable (`pip install -e .`, incluido en
+`requirements-dev.txt`), así que no hace falta poner `PYTHONPATH`: los cambios
+en `src/` se ven sin reinstalar. Solo hay que repetir la instalación si cambia
+`pyproject.toml` (dependencias, `[project.scripts]`...).

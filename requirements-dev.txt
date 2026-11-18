@@ -1,3 +1,5 @@
 -r requirements.txt
+# Instala pm3_dashboard en modo editable (los cambios en src/ se ven sin reinstalar).
+-e .
 pytest>=8.0
 pyinstaller>=6.0

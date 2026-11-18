@@ -1,0 +1,17 @@
+[usb] pm3 --> hw version
+
+ [ Proxmark3 RFID instrument ]
+
+ [ CLIENT ]
+  client: RRG/Iceman/master/v4.19552 2025-02-10 11:20:01 a1b2c3d4e
+  compiled with............. MinGW-w64 14.2.0
+  platform.................. Windows (64b) / x86_64
+
+ [ PROXMARK3 ]
+  device.................... PM3 GENERIC
+  firmware.................. PM3 GENERIC
+
+ [ ARM ]
+  bootrom: RRG/Iceman/master/v4.17140 2023-09-02 09:11:45 0f1e2d3c4
+       os: RRG/Iceman/master/v4.17140 2023-09-02 09:11:52 0f1e2d3c4
+  compiled with GCC 10.1.0

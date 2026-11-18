@@ -1,0 +1,10 @@
+[usb] pm3 --> lf search
+
+[=] NOTE: some demods output possible binary
+[=] if it finds something that looks like a tag
+[=] False Positives ARE possible
+[=] 
+[=] Checking for known tags...
+[=] 
+[-] ⛔ No known 125/134 kHz tags found!
+[=] Couldn't identify a chipset

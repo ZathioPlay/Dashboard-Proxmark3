@@ -1,0 +1,12 @@
+[usb] pm3 --> hw tune
+[=] Measuring antenna characteristics...
+[=] -------- LF Antenna ----------
+[+] LF antenna: 17.85 V - 125.00 kHz
+[+] LF antenna: 16.02 V - 134.83 kHz
+[+] LF optimal: 18.30 V - 128.57 kHz
+[!] LF antenna ( marginal )
+[=] -------- HF Antenna ----------
+[+] HF antenna:  2.71 V - 13.56 MHz
+[!] HF antenna ( unusable )
+[=] -------- LF tuning graph ---------
+[=] Done.

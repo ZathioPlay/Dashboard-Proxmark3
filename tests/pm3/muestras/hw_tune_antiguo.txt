@@ -1,0 +1,11 @@
+[usb] pm3 --> hw tune
+[=] Measuring antenna characteristics, please wait...
+[=] ---------- LF Antenna ----------
+[+] 125.00 kHz ........... 43.11 V
+[+] 134.83 kHz ........... 39.37 V
+[+] 132.19 kHz optimal.... 44.45 V
+[+] Approx. Q factor (*): 8.1 by frequency bandwidth measurement
+[=] ---------- HF Antenna ----------
+[+] 13.56 MHz ........... 12.40 V
+[+] Approx. Q factor (*): 4.2 by peak voltage measurement
+[=] Done.

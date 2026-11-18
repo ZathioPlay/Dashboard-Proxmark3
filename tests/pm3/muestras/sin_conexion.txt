@@ -1,0 +1,5 @@
+[=] Session log C:\Users\usuario\.proxmark3\logs\log_20261118.txt
+[+] loaded `C:\Users\usuario\.proxmark3\preferences.json`
+[!!] 🚨 ERROR: invalid serial port COM9
+[!!] 🚨 ERROR: cannot communicate with the Proxmark
+[=] Running in OFFLINE mode

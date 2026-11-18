@@ -7,9 +7,6 @@
             "request": "launch",
             "module": "pm3_dashboard",
             "cwd": "${workspaceFolder}",
-            "env": {
-                "PYTHONPATH": "${workspaceFolder}/src"
-            },
             "console": "integratedTerminal",
             "justMyCode": true
         },
@@ -20,9 +17,6 @@
             "module": "pytest",
             "args": ["-v"],
             "cwd": "${workspaceFolder}",
-            "env": {
-                "PYTHONPATH": "${workspaceFolder}/src"
-            },
             "console": "integratedTerminal",
             "justMyCode": false
         }

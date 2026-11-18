@@ -1,0 +1,11 @@
+[usb] pm3 --> hf search
+ 🕑  Searching for ISO14443-A tag...          
+[+]  UID: 04 68 95 71 FA 5C 64 
+[+] ATQA: 00 44
+[+]  SAK: 00 [2]
+[+] MANUFACTURER: NXP Semiconductors Germany
+[+] Possible types:
+[+]    MIFARE Ultralight EV1 / NTAG 21x
+[?] Hint: try `hf mfu info`
+
+[+] Valid ISO 14443-A tag found

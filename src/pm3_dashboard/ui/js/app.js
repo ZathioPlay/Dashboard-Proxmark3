@@ -181,22 +181,35 @@ async function cargarResumen() {
 
 // ==================== ARRANQUE ====================
 
+let apiLista = false;
+
+function apiDisponible() {
+    return Boolean(window.pywebview && window.pywebview.api && window.pywebview.api.obtener_resumen);
+}
+
+// Carga inicial: se llama desde DOMContentLoaded y desde 'pywebviewready'
+// (no se sabe cuál llega antes), pero solo debe cargar una vez.
+function alEstarListaLaApi() {
+    if (apiLista || !apiDisponible()) {
+        return;
+    }
+    apiLista = true;
+    cargarResumen();
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     crearMenu();
     mostrarSeccion('inicio');
     document.getElementById('btn-actualizar').addEventListener('click', cargarResumen);
+    alEstarListaLaApi();
 
-    if (window.pywebview && window.pywebview.api && window.pywebview.api.obtener_resumen) {
-        cargarResumen();
-    } else {
-        // Si tras unos segundos no aparece pywebview, se ha abierto fuera de la app.
-        setTimeout(() => {
-            if (!window.pywebview) {
-                mostrarError('Sin conexión con Python: abre la interfaz con "python -m pm3_dashboard", no directamente en el navegador.');
-            }
-        }, 3000);
-    }
+    // Si tras unos segundos no aparece pywebview, se ha abierto fuera de la app.
+    setTimeout(() => {
+        if (!apiLista) {
+            mostrarError('Sin conexión con Python: abre la interfaz con "python -m pm3_dashboard", no directamente en el navegador.');
+        }
+    }, 3000);
 });
 
 // pywebview lanza este evento cuando window.pywebview.api está lista.
-window.addEventListener('pywebviewready', cargarResumen);
+window.addEventListener('pywebviewready', alEstarListaLaApi);
