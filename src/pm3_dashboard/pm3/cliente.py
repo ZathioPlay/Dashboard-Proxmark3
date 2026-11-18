@@ -23,7 +23,7 @@ from typing import IO, Protocol
 from pm3_dashboard import paths
 from pm3_dashboard.config import ConfigPm3, cargar_config, resolver_ruta_cliente, resolver_rutas_extra
 from pm3_dashboard.pm3.modelos import ResultadoComando
-from pm3_dashboard.pm3.puerto import detectar_puerto
+from pm3_dashboard.pm3.puerto import detectar_puerto, puerto_presente
 from pm3_dashboard.pm3.salida import interpretar_salida, limpiar_salida
 
 MAX_LINEAS_SESION = 500
@@ -218,11 +218,13 @@ class ClientePm3:
         lanzador: Lanzador | None = None,
         detectar: Callable[[str], str | None] = detectar_puerto,
         carpeta_trabajo: Path | None = None,
+        presencia: Callable[[str], str | None] = puerto_presente,
     ) -> None:
         # La configuración se lee en cada comando: así se puede cambiar sin reiniciar.
         self._cargar = cargar
         self._lanzador: Lanzador = lanzador or LanzadorSubprocess()
         self._detectar = detectar
+        self._presencia = presencia
         self._carpeta_trabajo = carpeta_trabajo
         self._cerrojo = threading.Lock()
         self._sesion: SesionProceso | None = None
@@ -231,6 +233,10 @@ class ClientePm3:
     def emulando(self) -> bool:
         sesion = self._sesion
         return sesion is not None and not sesion.terminada
+
+    def puerto_presente(self) -> str | None:
+        """Comprobación ligera: el puerto si la Proxmark3 está conectada, sin lanzar el cliente."""
+        return self._presencia(self._cargar().puerto)
 
     def ejecutar(self, comando: str, timeout: float = 15.0) -> ResultadoComando:
         """Lanza un comando y espera a que termine. Nunca lanza excepciones."""

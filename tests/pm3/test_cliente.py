@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import threading
 from pathlib import Path
 
@@ -116,12 +117,26 @@ def test_entorno_incluye_dlls_del_cliente(tmp_path: Path) -> None:
     cliente = tmp_path / "client" / "proxmark3.exe"
     (cliente.parent / "libs").mkdir(parents=True)
     extra = tmp_path / "msys2"
+    path_original = os.pathsep.join([str(tmp_path / "sistema1"), str(tmp_path / "sistema2")])
 
-    env = construir_entorno(cliente, [extra], {"PATH": "C:\\Windows"})
+    env = construir_entorno(cliente, [extra], {"PATH": path_original})
 
-    rutas = env["PATH"].split(";" if ";" in env["PATH"] else ":")
-    assert rutas[0] == str(cliente.parent)
-    assert str(cliente.parent / "libs") in rutas
-    assert str(extra) in rutas
-    assert rutas[-1] == "C:\\Windows"
+    rutas = env["PATH"].split(os.pathsep)
+    assert rutas == [
+        str(cliente.parent),
+        str(cliente.parent / "libs"),
+        str(cliente.parent / "libs" / "shell"),
+        str(extra),
+        str(tmp_path / "sistema1"),
+        str(tmp_path / "sistema2"),
+    ]
     assert env["QT_PLUGIN_PATH"] == str(cliente.parent / "libs")
+
+
+def test_entorno_sin_carpeta_libs(tmp_path: Path) -> None:
+    cliente = tmp_path / "client" / "proxmark3.exe"
+
+    env = construir_entorno(cliente, [], {"PATH": str(tmp_path / "sistema")})
+
+    assert env["PATH"].split(os.pathsep) == [str(cliente.parent), str(tmp_path / "sistema")]
+    assert "QT_PLUGIN_PATH" not in env

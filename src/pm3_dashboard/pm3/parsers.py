@@ -11,12 +11,12 @@ import re
 
 from pm3_dashboard.pm3.modelos import (
     EstadoAntena,
-    FamiliaHF,
     InfoVersion,
     MedicionAntena,
     MedicionAntenas,
     TarjetaHF,
     TarjetaLF,
+    TipoTarjeta,
 )
 from pm3_dashboard.pm3.salida import limpiar_salida
 
@@ -135,15 +135,15 @@ def _hex_con_espacios(valor: str) -> str:
     return " ".join(valor.split()).upper()
 
 
-def _familia_hf(texto: str) -> FamiliaHF:
+def _tipo_hf(texto: str) -> TipoTarjeta:
     # Mismo orden de comprobación que el prototipo.
     if "MIFARE Classic 1K" in texto:
-        return FamiliaHF.MIFARE_CLASSIC_1K
+        return TipoTarjeta.MIFARE_CLASSIC_1K
     if "MIFARE Classic 4K" in texto:
-        return FamiliaHF.MIFARE_CLASSIC_4K
+        return TipoTarjeta.MIFARE_CLASSIC_4K
     if "Ultralight" in texto or "NTAG" in texto:
-        return FamiliaHF.ULTRALIGHT_NTAG
-    return FamiliaHF.DESCONOCIDA
+        return TipoTarjeta.ULTRALIGHT_NTAG
+    return TipoTarjeta.ISO14443A
 
 
 def parsear_hf_search(texto: str) -> TarjetaHF | None:
@@ -158,7 +158,7 @@ def parsear_hf_search(texto: str) -> TarjetaHF | None:
         uid=_hex_con_espacios(uid.group(1)),
         atqa=_hex_con_espacios(atqa.group(1)) if atqa else None,
         sak=sak.group(1).upper() if sak else None,
-        familia=_familia_hf(texto),
+        tipo=_tipo_hf(texto),
     )
 
 

@@ -26,13 +26,26 @@ class EstadoAntena(StrEnum):
     SIN_DATOS = "SIN DATOS"
 
 
-class FamiliaHF(StrEnum):
-    """Familias de tarjetas HF que se distinguen. El valor es el texto que se muestra."""
+class TipoTarjeta(StrEnum):
+    """Tipo canónico de tarjeta: el mismo valor en parsers, recetas, BD, importación e interfaz.
+
+    El valor se guarda en la base de datos y en los JSON exportados, así que no
+    se debe cambiar: para un tipo nuevo se añade un miembro.
+    """
 
     MIFARE_CLASSIC_1K = "MIFARE Classic 1K"
     MIFARE_CLASSIC_4K = "MIFARE Classic 4K"
     ULTRALIGHT_NTAG = "MIFARE Ultralight / NTAG"
-    DESCONOCIDA = "ISO14443-A (HF)"
+    ISO14443A = "ISO14443-A"  # HF sin familia concreta
+    EM410X = "EM410x"
+
+    @property
+    def banda(self) -> Banda:
+        return Banda.LF if self is TipoTarjeta.EM410X else Banda.HF
+
+    @classmethod
+    def de_banda(cls, banda: Banda | str) -> frozenset[TipoTarjeta]:
+        return frozenset(tipo for tipo in cls if tipo.banda == banda)
 
 
 @dataclass(frozen=True)
@@ -89,7 +102,7 @@ class TarjetaHF:
     uid: str
     atqa: str | None
     sak: str | None
-    familia: FamiliaHF
+    tipo: TipoTarjeta
 
 
 @dataclass(frozen=True)
@@ -100,21 +113,28 @@ class TarjetaLF:
 
 
 @dataclass(frozen=True)
-class TarjetaLeida:
-    """Tarjeta lista para mostrar y guardar, con sus comandos de clonado y emulación."""
+class Derivados:
+    """Datos que se deducen del tipo y el UID (los genera siempre pm3/recetas.py)."""
 
-    fecha: str
     frecuencia: str
-    banda: Banda
-    tipo: str
-    uid: str
-    atqa: str
-    sak: str
     tarjeta_destino: str
     seguridad: str
     comando_clonado: str
     comando_emulacion: str
+
+
+@dataclass(frozen=True)
+class TarjetaLeida:
+    """Tarjeta leída, lista para mostrar y guardar."""
+
+    fecha: str
+    banda: Banda
+    tipo: TipoTarjeta
+    uid: str
+    atqa: str
+    sak: str
     salida: str
+    derivados: Derivados
 
 
 @dataclass(frozen=True)

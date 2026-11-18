@@ -55,17 +55,13 @@
                 </div>
             </div>
 
-            <!-- Insignia de estado de la Proxmark3 (la rellena app.js) -->
+            <!-- Insignia de estado de la Proxmark3 (la rellena inicio.js) -->
             <div id="insignia-estado" class="flex items-center gap-2 px-3 py-1 rounded-full bg-slate-800/60 border border-slate-700 text-xs font-mono">
                 <span id="insignia-punto" class="w-2 h-2 rounded-full bg-slate-500"></span>
-                <span id="insignia-texto" class="text-slate-300 font-semibold">CARGANDO…</span>
+                <span id="insignia-texto" class="text-slate-300 font-semibold">COMPROBANDO…</span>
                 <span id="insignia-puerto" class="text-slate-400"></span>
             </div>
         </div>
-
-        <span id="aviso-ejemplo" class="hidden px-2.5 py-1 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[11px] font-mono">
-            DATOS DE EJEMPLO
-        </span>
     </header>
 
     <!-- ==================== CUERPO: MENÚ LATERAL + CONTENIDO ==================== -->
@@ -105,6 +101,22 @@
                 <!-- Error si no hay conexión con Python -->
                 <div id="error-api" class="hidden bg-rose-950/30 border border-rose-500/40 rounded-2xl p-4 text-sm text-rose-200"></div>
 
+                <!-- Proxmark3 desconectada: motivo y qué hacer -->
+                <div id="aviso-dispositivo" class="hidden bg-rose-950/30 border border-rose-500/40 rounded-2xl p-4 flex items-start gap-3">
+                    <svg class="w-5 h-5 text-rose-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
+                    <div>
+                        <div class="text-sm font-bold text-rose-300">Proxmark3 desconectada</div>
+                        <p id="aviso-dispositivo-texto" class="text-sm text-rose-200/90 mt-1 break-words"></p>
+                        <p class="text-xs text-slate-400 mt-2">Los datos guardados se siguen mostrando. La conexión se comprueba sola cada pocos segundos.</p>
+                    </div>
+                </div>
+
+                <!-- Versiones de cliente y firmware distintas -->
+                <div id="aviso-version" class="hidden bg-amber-950/30 border border-amber-500/40 rounded-2xl p-4 flex items-start gap-3">
+                    <svg class="w-5 h-5 text-amber-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                    <p id="aviso-version-texto" class="text-sm text-amber-200"></p>
+                </div>
+
                 <!-- Tarjetas KPI -->
                 <div class="grid grid-cols-4 gap-4">
                     <div class="bg-cyber-900 border border-slate-800 rounded-2xl p-5">
@@ -112,17 +124,17 @@
                         <div id="kpi-dispositivo" class="text-xl font-bold text-white mt-2">—</div>
                         <div id="kpi-firmware" class="text-xs font-mono text-slate-500 mt-1 truncate">—</div>
                     </div>
-                    <div class="bg-cyber-900 border border-slate-800 rounded-2xl p-5">
+                    <div data-ir-a="base" title="Ver en Base de datos" class="bg-cyber-900 border border-slate-800 hover:border-cyan-500/40 rounded-2xl p-5 cursor-pointer transition">
                         <div class="text-xs font-mono uppercase text-slate-400">Tarjetas guardadas</div>
                         <div id="kpi-total" class="text-3xl font-mono font-bold text-white mt-2">—</div>
                         <div class="text-xs text-slate-500 mt-1">en la base de datos</div>
                     </div>
-                    <div class="bg-cyber-900 border border-slate-800 rounded-2xl p-5">
+                    <div data-ir-a="base" data-banda="hf" title="Ver tarjetas HF" class="bg-cyber-900 border border-slate-800 hover:border-cyan-500/40 rounded-2xl p-5 cursor-pointer transition">
                         <div class="text-xs font-mono uppercase text-cyan-400">Alta frecuencia (HF)</div>
                         <div id="kpi-hf" class="text-3xl font-mono font-bold text-white mt-2">—</div>
                         <div class="text-xs text-slate-500 mt-1">13.56 MHz · MIFARE, NTAG…</div>
                     </div>
-                    <div class="bg-cyber-900 border border-slate-800 rounded-2xl p-5">
+                    <div data-ir-a="base" data-banda="lf" title="Ver tarjetas LF" class="bg-cyber-900 border border-slate-800 hover:border-cyan-500/40 rounded-2xl p-5 cursor-pointer transition">
                         <div class="text-xs font-mono uppercase text-amber-400">Baja frecuencia (LF)</div>
                         <div id="kpi-lf" class="text-3xl font-mono font-bold text-white mt-2">—</div>
                         <div class="text-xs text-slate-500 mt-1">125 kHz · EM4100, HID…</div>
@@ -132,11 +144,19 @@
                 <div class="grid grid-cols-5 gap-4">
                     <!-- Última medición de antenas -->
                     <div class="col-span-2 bg-cyber-900 border border-slate-800 rounded-2xl p-5 space-y-5">
-                        <div class="flex items-center justify-between">
+                        <div class="flex items-center justify-between gap-2">
                             <h3 class="text-base font-bold text-white">Última medición de antenas</h3>
                             <span class="text-xs font-mono px-2 py-0.5 rounded bg-slate-800 text-cyan-400">hw tune</span>
                         </div>
-                        <div id="antenas-fecha" class="text-xs font-mono text-slate-500">—</div>
+                        <div class="flex items-center justify-between gap-2">
+                            <div id="antenas-fecha" class="text-xs font-mono text-slate-500">—</div>
+                            <button id="btn-medir" class="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-700 disabled:text-slate-400 disabled:cursor-wait text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 transition">
+                                <svg id="btn-medir-icono" class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                                <span id="btn-medir-texto">Medir ahora</span>
+                            </button>
+                        </div>
+                        <p id="antenas-error" class="hidden text-xs text-rose-300 bg-rose-950/30 border border-rose-500/30 rounded-lg p-2 break-words"></p>
+                        <div id="antenas-vacio" class="hidden text-sm text-slate-500 py-6 text-center">Sin mediciones todavía.</div>
                         <div id="antena-lf"></div>
                         <div id="antena-hf"></div>
                     </div>
@@ -148,6 +168,98 @@
                             <li class="py-3 text-sm text-slate-500">Cargando…</li>
                         </ul>
                     </div>
+                </div>
+            </section>
+
+            <!-- ============ SECCIÓN: LECTURA ============ -->
+            <section id="seccion-lectura" data-seccion class="hidden max-w-5xl mx-auto space-y-6">
+                <div>
+                    <span class="text-xs font-mono uppercase tracking-wider text-cyan-400">hf search · lf search</span>
+                    <h2 class="text-2xl font-bold text-white mt-1">Lectura de tarjetas</h2>
+                </div>
+
+                <div class="bg-cyber-900 border border-slate-800 p-5 rounded-2xl flex items-center justify-between gap-4">
+                    <p class="text-sm text-slate-400">Coloca la tarjeta o el llavero sobre la antena de la Proxmark3 y pulsa <strong class="text-slate-200">Escanear</strong>.</p>
+                    <div class="flex items-center gap-2 shrink-0">
+                        <select id="lectura-banda" class="bg-cyber-950 border border-slate-700 rounded-xl px-3 py-2.5 text-xs font-mono text-slate-200 focus:outline-none focus:border-cyan-500">
+                            <option value="auto">Auto (HF y LF)</option>
+                            <option value="hf">Solo HF (13.56 MHz)</option>
+                            <option value="lf">Solo LF (125 kHz)</option>
+                        </select>
+                        <button id="btn-escanear" class="px-5 py-2.5 bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-700 disabled:text-slate-400 disabled:cursor-wait text-white text-sm font-semibold rounded-xl flex items-center gap-2 transition">
+                            <svg id="btn-escanear-icono" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0"/></svg>
+                            <span id="btn-escanear-texto">Escanear</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div id="lectura-error" class="hidden bg-rose-950/30 border border-rose-500/40 rounded-2xl p-4 text-sm text-rose-200 break-words"></div>
+
+                <div id="lectura-resultado" class="hidden grid grid-cols-5 gap-4">
+                    <div class="col-span-3 bg-cyber-900 border border-slate-800 rounded-2xl p-5 space-y-4">
+                        <div id="lectura-ya-guardada" class="hidden text-xs text-amber-200 bg-amber-950/30 border border-amber-500/30 rounded-lg p-2"></div>
+                        <div id="lectura-ficha"></div>
+                    </div>
+
+                    <form id="form-guardar" class="col-span-2 bg-cyber-900 border border-slate-800 rounded-2xl p-5 space-y-4 self-start">
+                        <h3 class="text-base font-bold text-white">Guardar en la base de datos</h3>
+                        <label class="block space-y-1">
+                            <span class="text-xs font-mono text-slate-400">Nombre *</span>
+                            <input id="guardar-nombre" type="text" maxlength="100" required placeholder="p. ej. Llavero del portal"
+                                class="w-full bg-cyber-950 border border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-cyan-500">
+                        </label>
+                        <label class="block space-y-1">
+                            <span class="text-xs font-mono text-slate-400">Notas</span>
+                            <textarea id="guardar-notas" rows="4" maxlength="2000"
+                                class="w-full bg-cyber-950 border border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-cyan-500"></textarea>
+                        </label>
+                        <p id="guardar-mensaje" class="hidden text-xs rounded-lg p-2 break-words"></p>
+                        <button id="btn-guardar" type="submit" class="w-full px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:text-slate-400 text-white text-sm font-semibold rounded-xl transition">
+                            Guardar tarjeta
+                        </button>
+                    </form>
+                </div>
+            </section>
+
+            <!-- ============ SECCIÓN: BASE DE DATOS ============ -->
+            <section id="seccion-base" data-seccion class="hidden max-w-6xl mx-auto space-y-6">
+                <div class="flex items-end justify-between">
+                    <div>
+                        <span class="text-xs font-mono uppercase tracking-wider text-cyan-400">Tarjetas guardadas</span>
+                        <h2 class="text-2xl font-bold text-white mt-1">Base de datos</h2>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button id="btn-importar" class="px-4 py-2 bg-cyber-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-sm text-cyan-300 transition">Importar JSON</button>
+                        <button id="btn-exportar" class="px-4 py-2 bg-cyber-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-sm text-cyan-300 transition">Exportar JSON</button>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-3">
+                    <input id="base-buscar" type="search" placeholder="Buscar por nombre, notas o UID…"
+                        class="flex-1 bg-cyber-900 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-cyan-500">
+                    <select id="base-banda" class="bg-cyber-900 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-cyan-500">
+                        <option value="">Todas las bandas</option>
+                        <option value="hf">HF (13.56 MHz)</option>
+                        <option value="lf">LF (125 kHz)</option>
+                    </select>
+                </div>
+
+                <div id="base-mensaje" class="hidden rounded-2xl p-4 text-sm break-words"></div>
+
+                <div class="bg-cyber-900 border border-slate-800 rounded-2xl overflow-hidden">
+                    <table class="w-full text-sm">
+                        <thead class="bg-cyber-800/60 text-xs font-mono uppercase text-slate-400">
+                            <tr>
+                                <th class="text-left px-4 py-3">Nombre</th>
+                                <th class="text-left px-4 py-3">Tipo</th>
+                                <th class="text-left px-4 py-3">UID / ID</th>
+                                <th class="text-left px-4 py-3">Fecha</th>
+                                <th class="text-right px-4 py-3">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="base-filas" class="divide-y divide-slate-800"></tbody>
+                    </table>
+                    <div id="base-vacio" class="hidden px-4 py-10 text-center text-sm text-slate-500"></div>
                 </div>
             </section>
 
@@ -166,6 +278,20 @@
         </main>
     </div>
 
+    <!-- ==================== VENTANA EMERGENTE (la rellena comun.js) ==================== -->
+    <dialog id="modal" class="bg-cyber-900 text-slate-200 border border-slate-700 rounded-2xl p-0 w-full max-w-2xl shadow-2xl">
+        <div class="p-6 space-y-4">
+            <h3 id="modal-titulo" class="text-lg font-bold text-white"></h3>
+            <div id="modal-cuerpo" class="text-sm text-slate-300 space-y-3 max-h-[60vh] overflow-y-auto"></div>
+            <div id="modal-botones" class="flex justify-end gap-2 pt-2"></div>
+        </div>
+    </dialog>
+
+    <!-- Scripts normales (no módulos ES) en orden: comun.js primero, app.js al final. -->
+    <script src="js/comun.js"></script>
+    <script src="js/inicio.js"></script>
+    <script src="js/lectura.js"></script>
+    <script src="js/base_datos.js"></script>
     <script src="js/app.js"></script>
 </body>
 </html>

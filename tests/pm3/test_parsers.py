@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from pm3_dashboard.pm3.modelos import EstadoAntena, FamiliaHF
+from pm3_dashboard.pm3.modelos import EstadoAntena, TipoTarjeta
 from pm3_dashboard.pm3.parsers import (
     parsear_hf_search,
     parsear_hw_tune,
@@ -96,15 +96,15 @@ def test_hw_tune_ignora_colores_ansi() -> None:
 
 
 @pytest.mark.parametrize(
-    ("muestra", "uid", "atqa", "sak", "familia"),
+    ("muestra", "uid", "atqa", "sak", "tipo"),
     [
-        ("hf_search_1k", "5A 3E 7C 1B", "00 04", "08", FamiliaHF.MIFARE_CLASSIC_1K),
-        ("hf_search_4k", "9E 2B 44 C0", "00 02", "18", FamiliaHF.MIFARE_CLASSIC_4K),
-        ("hf_search_ntag", "04 68 95 71 FA 5C 64", "00 44", "00", FamiliaHF.ULTRALIGHT_NTAG),
+        ("hf_search_1k", "5A 3E 7C 1B", "00 04", "08", TipoTarjeta.MIFARE_CLASSIC_1K),
+        ("hf_search_4k", "9E 2B 44 C0", "00 02", "18", TipoTarjeta.MIFARE_CLASSIC_4K),
+        ("hf_search_ntag", "04 68 95 71 FA 5C 64", "00 44", "00", TipoTarjeta.ULTRALIGHT_NTAG),
     ],
 )
 def test_hf_search_detecta_tarjeta(
-    muestra: str, uid: str, atqa: str, sak: str, familia: FamiliaHF
+    muestra: str, uid: str, atqa: str, sak: str, tipo: TipoTarjeta
 ) -> None:
     tarjeta = parsear_hf_search(cargar_muestra(muestra))
 
@@ -112,7 +112,7 @@ def test_hf_search_detecta_tarjeta(
     assert tarjeta.uid == uid
     assert tarjeta.atqa == atqa
     assert tarjeta.sak == sak
-    assert tarjeta.familia is familia
+    assert tarjeta.tipo is tipo
 
 
 def test_hf_search_sin_tarjeta() -> None:
@@ -135,7 +135,7 @@ def test_hf_search_tipo_desconocido_sin_atqa_ni_sak() -> None:
     assert tarjeta.uid == "DE AD BE EF"
     assert tarjeta.atqa is None
     assert tarjeta.sak is None
-    assert tarjeta.familia is FamiliaHF.DESCONOCIDA
+    assert tarjeta.tipo is TipoTarjeta.ISO14443A
 
 
 # ---------------------------------------------------------------- lf search

@@ -33,3 +33,18 @@ body {
 .rf-wave {
     animation: pulse-ring 1.8s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
 }
+
+/* Ventana emergente (<dialog>) */
+dialog#modal {
+    margin: auto;
+}
+dialog#modal::backdrop {
+    background: rgba(6, 9, 15, 0.75);
+    backdrop-filter: blur(2px);
+}
+
+/* Salida del cliente de Iceman */
+.salida-cliente {
+    white-space: pre-wrap;
+    word-break: break-all;
+}

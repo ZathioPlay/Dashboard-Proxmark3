@@ -75,6 +75,9 @@ pm3-dashboard/
 - Cada módulo nuevo de `pm3/` o `storage/` lleva sus tests.
 - La interfaz nunca ejecuta comandos directamente: siempre pasa por `api/`.
 - Toda acción que **escribe** en una tarjeta (clonar) pide confirmación al usuario.
+- Los comandos de clonado y emulación se generan siempre con `pm3/recetas.py` a
+  partir del UID/ID; nunca se ejecuta un comando guardado en la base de datos ni
+  importado de un archivo.
 - No hacer commits ni push sin que el usuario lo pida.
 - Uso legítimo: la herramienta es para auditar tarjetas propias o con
   autorización; mantener ese aviso visible en la app y en la documentación.
