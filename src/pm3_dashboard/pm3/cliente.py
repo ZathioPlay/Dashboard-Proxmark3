@@ -11,6 +11,7 @@ tests por uno falso y no usar nunca la Proxmark real.
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import sys
 import threading
@@ -71,10 +72,17 @@ class Lanzador(Protocol):
 
     def abrir(self, argv: Sequence[str], *, env: Mapping[str, str], cwd: Path) -> ProcesoLargo: ...
 
+    def lanzar_consola(self, argv: Sequence[str], *, env: Mapping[str, str], cwd: Path) -> None: ...
+
 
 def _sin_ventana() -> int:
     """En Windows evita que se abra una consola negra al lanzar el cliente."""
     return subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+
+
+def _nueva_consola() -> int:
+    """En Windows abre el proceso en su propia ventana de consola."""
+    return subprocess.CREATE_NEW_CONSOLE if sys.platform == "win32" else 0
 
 
 class LanzadorSubprocess:
@@ -112,6 +120,40 @@ class LanzadorSubprocess:
             cwd=str(cwd),
             creationflags=_sin_ventana(),
         )
+
+    def lanzar_consola(self, argv: Sequence[str], *, env: Mapping[str, str], cwd: Path) -> None:
+        # Ventana propia, interactiva: ni se captura ni se espera (no bloquea la app).
+        subprocess.Popen(
+            list(argv),
+            env=dict(env),
+            cwd=str(cwd),
+            creationflags=_nueva_consola(),
+            close_fds=True,
+        )
+
+
+# ---------------------------------------------------------------------------
+# Consola nativa (abrir pm3 en una ventana de PowerShell)
+# ---------------------------------------------------------------------------
+# El puerto puede venir de config.json (editable), así que se valida antes de
+# meterlo en la línea de PowerShell, para que no se pueda inyectar nada.
+_RE_PUERTO = re.compile(r"^(COM\d{1,3}|/dev/[\w./-]+)$", re.IGNORECASE)
+
+
+@dataclass(frozen=True)
+class ConsolaPm3:
+    puerto: str
+    comando: str  # legible, para mostrar al usuario
+
+
+def _argv_consola(cliente: Path, puerto: str) -> list[str]:
+    if not _RE_PUERTO.match(puerto):
+        raise ErrorPm3(f"Puerto no válido para abrir la consola: {puerto!r}")
+    # Comillas simples de PowerShell: se escapan duplicándolas.
+    ruta = str(cliente).replace("'", "''")
+    orden = f"& '{ruta}' -p {puerto}"
+    # -NoExit deja la ventana abierta al salir de pm3, para ver la última salida.
+    return ["powershell", "-NoExit", "-Command", orden]
 
 
 # ---------------------------------------------------------------------------
@@ -301,6 +343,14 @@ class ClientePm3:
     def buscar_cliente(self) -> ResultadoBusqueda:
         """Qué cliente de Iceman se usaría y de dónde sale (no ejecuta nada)."""
         return self._localizar(self._cargar())
+
+    def abrir_consola(self) -> ConsolaPm3:
+        """Abre el cliente de Iceman en una ventana de PowerShell propia, con el mismo
+        entorno que usa la app. No toma el cerrojo del puerto. Lanza ErrorPm3 si falla."""
+        prep = self._preparar()  # mismo cliente, puerto y entorno (DLL incluidas)
+        argv = _argv_consola(prep.cliente, prep.puerto)
+        self._lanzador.lanzar_consola(argv, env=prep.env, cwd=self._cwd())
+        return ConsolaPm3(puerto=prep.puerto, comando=f"{prep.cliente.name} -p {prep.puerto}")
 
     def _preparar(self) -> _Preparacion:
         config = self._cargar()

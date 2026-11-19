@@ -66,9 +66,10 @@ pm3-dashboard/
    (CRUD, búsqueda, exportar/importar JSON), clonado y emulación, terminal.
    Hecho: las seis secciones del menú funcionan — inicio, antenas (`hw tune`
    con histórico), lectura, base de datos (CRUD, búsqueda, exportar/importar),
-   clonado y emulación (volcado HF `hf mf dump` / `hf mfu dump`, recuperación de
-   claves `hf mf autopwn`, clonado real de MIFARE Classic y emulación `sim`) y
-   terminal (lista blanca de comandos de lectura; el resto pide confirmación).
+   clonado y emulación (volcado HF: MIFARE Classic con `hf mf autopwn`, que
+   prueba las claves por defecto y recupera las que falten en una sola acción,
+   y Ultralight con `hf mfu dump`; clonado real de MIFARE Classic y emulación
+   `sim`) y terminal (lista blanca de comandos de lectura; el resto confirma).
    Lectura enriquecida del volcado: ASCII, claves A/B por sector, bits de acceso
    en palabras y registros NDEF (NTAG/Ultralight). Escritura de bloques en
    **modo laboratorio** (`hf mf wrbl` / `hf mfu wrbl`) para tarjetas propias: ver

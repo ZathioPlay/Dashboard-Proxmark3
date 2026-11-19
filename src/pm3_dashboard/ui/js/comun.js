@@ -49,6 +49,32 @@ function api() {
     return window.pywebview.api;
 }
 
+/** Copia texto al portapapeles. Usa la API moderna y, si no está (WebView2 sin
+ *  permiso de clipboard), recurre a un textarea temporal. Devuelve true si copió. */
+async function copiarTexto(texto) {
+    try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(texto);
+            return true;
+        }
+    } catch (error) {
+        /* cae al método de reserva */
+    }
+    try {
+        const area = document.createElement('textarea');
+        area.value = texto;
+        area.style.position = 'fixed';
+        area.style.opacity = '0';
+        document.body.appendChild(area);
+        area.select();
+        const ok = document.execCommand('copy');
+        document.body.removeChild(area);
+        return ok;
+    } catch (error) {
+        return false;
+    }
+}
+
 /** (1, 'importada') -> '1 tarjeta importada'; (3, 'importada') -> '3 tarjetas importadas'. */
 function cantidadTarjetas(n, participio) {
     const plural = n === 1 ? '' : 's';
@@ -57,6 +83,25 @@ function cantidadTarjetas(n, participio) {
 
 function textoError(error) {
     return (error && error.message) || String(error);
+}
+
+/** Texto de un fallo de la Api: el mensaje y, si existe, la salida del cliente de Iceman.
+ *  Para contextos que ya escapan (p. ej. dentro de un <pre> con escaparHtml). */
+function mensajeFallo(r) {
+    let texto = r.error || 'El comando falló.';
+    if (r.salida && r.salida.trim()) {
+        texto += `\n\n${r.salida}`;
+    }
+    return texto;
+}
+
+/** HTML de un fallo: mensaje + salida completa del cliente en un <pre>, todo escapado. */
+function htmlFalloConSalida(r) {
+    let html = `<div>${escaparHtml(r.error || 'El comando falló.')}</div>`;
+    if (r.salida && r.salida.trim()) {
+        html += `<pre class="salida-cliente mt-2 bg-cyber-950 border border-slate-800 rounded-lg p-2 text-[11px] text-slate-300 max-h-48 overflow-y-auto">${escaparHtml(r.salida)}</pre>`;
+    }
+    return html;
 }
 
 /** Pone un botón en modo "trabajando" y lo restaura al terminar la promesa. */

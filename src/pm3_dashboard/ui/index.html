@@ -234,6 +234,17 @@
                         </button>
                     </form>
                 </div>
+
+                <!-- Lectura de bloques de la tarjeta recién escaneada (solo HF) -->
+                <div id="lectura-bloques" class="hidden bg-cyber-900 border border-slate-800 rounded-2xl p-5 space-y-3">
+                    <div class="flex items-center justify-between gap-2">
+                        <h3 class="text-base font-bold text-white">Memoria de la tarjeta</h3>
+                        <button id="btn-leer-lectura" class="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-700 disabled:text-slate-400 text-white text-xs font-semibold rounded-lg transition">Leer bloques</button>
+                    </div>
+                    <p class="text-[11px] text-amber-300/80">Lee la memoria solo de tarjetas propias o con autorización. No hace falta guardar la tarjeta; si la guardas, el volcado se asocia a ella.</p>
+                    <div id="lectura-bloques-estado" class="hidden rounded-lg p-2 text-xs"></div>
+                    <div id="lectura-bloques-tabla"></div>
+                </div>
             </section>
 
             <!-- ============ SECCIÓN: BASE DE DATOS ============ -->
@@ -360,10 +371,16 @@
 
             <!-- ============ SECCIÓN: TERMINAL ============ -->
             <section id="seccion-terminal" data-seccion class="hidden max-w-5xl mx-auto space-y-4">
-                <div>
-                    <span class="text-xs font-mono uppercase tracking-wider text-cyan-400">cliente de Iceman</span>
-                    <h2 class="text-2xl font-bold text-white mt-1">Terminal</h2>
-                    <p class="text-sm text-slate-400 mt-1">Envía comandos al cliente. Pensada para <strong class="text-slate-200">lectura y diagnóstico</strong>; cualquier otro comando pide confirmación.</p>
+                <div class="flex items-start justify-between gap-4 flex-wrap">
+                    <div>
+                        <span class="text-xs font-mono uppercase tracking-wider text-cyan-400">cliente de Iceman</span>
+                        <h2 class="text-2xl font-bold text-white mt-1">Terminal</h2>
+                        <p class="text-sm text-slate-400 mt-1">Envía comandos al cliente. Pensada para <strong class="text-slate-200">lectura y diagnóstico</strong>; cualquier otro comando pide confirmación.</p>
+                    </div>
+                    <div class="shrink-0 text-right">
+                        <button id="btn-consola" class="hidden px-4 py-2.5 bg-cyber-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-sm text-cyan-300 transition">Abrir pm3 en una consola</button>
+                        <p id="consola-no-disponible" class="hidden text-xs text-slate-500 max-w-xs"></p>
+                    </div>
                 </div>
 
                 <div id="terminal-salida" class="bg-cyber-950 border border-slate-800 rounded-2xl p-4 h-80 overflow-y-auto font-mono text-xs text-slate-300 space-y-2">
@@ -380,6 +397,17 @@
                 </form>
 
                 <p class="text-[11px] text-amber-300/80">Usa la terminal solo con tarjetas propias o con autorización. Los comandos de escritura (clonar, borrar, escribir bloques) piden confirmación antes de ejecutarse.</p>
+            </section>
+
+            <!-- ============ SECCIÓN: GUÍA DE COMANDOS ============ -->
+            <section id="seccion-guia" data-seccion class="hidden max-w-5xl mx-auto space-y-6">
+                <div>
+                    <span class="text-xs font-mono uppercase tracking-wider text-cyan-400">referencia</span>
+                    <h2 class="text-2xl font-bold text-white mt-1">Guía de comandos</h2>
+                    <p class="text-sm text-slate-400 mt-1">Los comandos más usados del cliente de Iceman. Las salidas son <strong class="text-slate-200">ejemplos</strong> con el formato real; los valores (UID, voltajes…) variarán en tu tarjeta.</p>
+                </div>
+                <p id="guia-aviso" class="text-[11px] text-amber-300/80 bg-amber-950/20 border border-amber-500/20 rounded-xl p-2"></p>
+                <div id="guia-lista" class="space-y-6"></div>
             </section>
         </main>
     </div>
@@ -402,6 +430,7 @@
     <script src="js/base_datos.js"></script>
     <script src="js/emulacion.js"></script>
     <script src="js/terminal.js"></script>
+    <script src="js/guia.js"></script>
     <script src="js/app.js"></script>
 </body>
 </html>

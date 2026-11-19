@@ -6,11 +6,14 @@ import os
 import threading
 from pathlib import Path
 
+import pytest
+
 from pm3_dashboard.config import ConfigPm3
 from pm3_dashboard.pm3.cliente import (
     MSG_OCUPADA,
     MSG_TIEMPO_AGOTADO,
     ClientePm3,
+    ErrorPm3,
     TiempoAgotado,
     construir_entorno,
 )
@@ -185,3 +188,48 @@ def test_entorno_sin_carpeta_libs(tmp_path: Path) -> None:
 
     assert env["PATH"].split(os.pathsep) == [str(cliente.parent), str(tmp_path / "sistema")]
     assert "QT_PLUGIN_PATH" not in env
+
+
+# ---------------------------------------------------------------- abrir consola nativa
+
+def test_abrir_consola_arma_el_comando_y_el_entorno(
+    cliente: ClientePm3, lanzador: LanzadorFalso, ejecutable: Path
+) -> None:
+    consola = cliente.abrir_consola()
+
+    assert consola.puerto == "COM5"
+    assert len(lanzador.consolas) == 1
+    argv = lanzador.consolas[0]["argv"]
+    assert argv == ["powershell", "-NoExit", "-Command", f"& '{ejecutable}' -p COM5"]
+    # Mismo entorno que la app: PATH con la carpeta del cliente.
+    assert str(ejecutable.parent) in lanzador.consolas[0]["env"]["PATH"]
+    assert lanzador.llamadas == []  # no se ejecuta ningún comando -c
+
+
+def test_abrir_consola_sin_cliente(lanzador: LanzadorFalso, tmp_path: Path) -> None:
+    cli = ClientePm3(
+        cargar=lambda: ConfigPm3(puerto="COM5"),
+        lanzador=lanzador,
+        localizar=lambda _: ResultadoBusqueda(None, (r"vendor\pm3-client",)),
+        carpeta_trabajo=tmp_path,
+    )
+    with pytest.raises(ErrorPm3, match="No se encuentra el cliente"):
+        cli.abrir_consola()
+    assert lanzador.consolas == []
+
+
+def test_abrir_consola_sin_puerto(config: ConfigPm3, lanzador: LanzadorFalso, tmp_path: Path) -> None:
+    cli = ClientePm3(cargar=lambda: config, lanzador=lanzador, detectar=lambda _: None, carpeta_trabajo=tmp_path)
+
+    with pytest.raises(ErrorPm3, match="No se detecta ninguna Proxmark3"):
+        cli.abrir_consola()
+    assert lanzador.consolas == []
+
+
+def test_abrir_consola_rechaza_puerto_con_inyeccion(lanzador: LanzadorFalso, ejecutable: Path, tmp_path: Path) -> None:
+    config = ConfigPm3(ruta_cliente=str(ejecutable), puerto="COM5; Remove-Item C:\\")
+    cli = ClientePm3(cargar=lambda: config, lanzador=lanzador, detectar=lambda p: p, carpeta_trabajo=tmp_path)
+
+    with pytest.raises(ErrorPm3, match="Puerto no válido"):
+        cli.abrir_consola()
+    assert lanzador.consolas == []  # nada se lanza

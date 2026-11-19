@@ -29,7 +29,7 @@ async function correrComandoTerminal(comando, confirmado) {
             anadirBloqueTerminal(comando, `${r.error} (menú «Clonado y emulación»)`, 'error');
             return;
         }
-        anadirBloqueTerminal(comando, r.ok ? (r.salida || '(sin salida)') : r.error, r.ok ? 'ok' : 'error');
+        anadirBloqueTerminal(comando, r.ok ? (r.salida || '(sin salida)') : mensajeFallo(r), r.ok ? 'ok' : 'error');
     } catch (error) {
         anadirBloqueTerminal(comando, `Error: ${textoError(error)}`, 'error');
     } finally {
@@ -94,7 +94,64 @@ function navegarHistorial(evento) {
     requestAnimationFrame(() => entrada.setSelectionRange(entrada.value.length, entrada.value.length));
 }
 
+// ==================== ABRIR pm3 EN UNA CONSOLA NATIVA ====================
+// El botón solo aparece si hay cliente localizado y Proxmark conectada.
+
+async function cargarEstadoConsola() {
+    mostrar('btn-consola', false);
+    mostrar('consola-no-disponible', false);
+    try {
+        const r = await api().estado_consola();
+        if (r.ok && r.disponible) {
+            const b = $('btn-consola');
+            b.title = `${r.cliente.ruta} · puerto ${r.puerto}`;
+            mostrar('btn-consola', true);
+        } else {
+            ponerTexto('consola-no-disponible', r.mensaje || 'No se puede abrir la consola.');
+            mostrar('consola-no-disponible', true);
+        }
+    } catch (error) {
+        /* sin estado: no se muestra el botón */
+    }
+}
+
+async function abrirConsolaPm3() {
+    const aceptado = await confirmar(
+        'Abrir pm3 en una consola',
+        `<p>Se abrirá el cliente de Iceman en una ventana de PowerShell, conectado al puerto detectado.</p>
+         <ul class="list-disc list-inside text-xs text-amber-200 mt-2 space-y-1">
+            <li>Mientras esa consola esté abierta, <strong class="text-white">la app no podrá usar la Proxmark</strong> (un solo cliente por puerto a la vez).</li>
+            <li>En esa consola los comandos se ejecutan <strong class="text-white">sin la confirmación de la app</strong>.</li>
+            <li>Úsala solo con tarjetas propias o con autorización.</li>
+         </ul>`,
+        'Abrir consola',
+    );
+    if (!aceptado) {
+        return;
+    }
+    try {
+        const r = await api().abrir_consola_pm3();
+        if (r.ok) {
+            anadirBloqueTerminal(`(consola) ${r.comando}`, `Consola abierta en ${r.puerto}. Mientras esté abierta, la app no puede usar la Proxmark.`, 'ok');
+        } else {
+            anadirBloqueTerminal('(consola)', mensajeFallo(r), 'error');
+        }
+    } catch (error) {
+        anadirBloqueTerminal('(consola)', `Error al abrir la consola: ${textoError(error)}`, 'error');
+    }
+}
+
+/** Pre-rellena la entrada de la terminal con un comando (desde la Guía). No lo ejecuta. */
+function ponerEnTerminal(comando) {
+    const entrada = $('terminal-entrada');
+    entrada.value = comando;
+    $('terminal-confirmacion').innerHTML = '';
+    entrada.focus();
+    entrada.setSelectionRange(entrada.value.length, entrada.value.length);
+}
+
 function iniciarSeccionTerminal() {
     $('terminal-form').addEventListener('submit', enviarTerminal);
     $('terminal-entrada').addEventListener('keydown', navegarHistorial);
+    $('btn-consola').addEventListener('click', abrirConsolaPm3);
 }

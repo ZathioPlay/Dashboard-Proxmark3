@@ -26,6 +26,7 @@ from pm3_dashboard.pm3.modelos import Banda, Respuesta, TarjetaLeida, TipoTarjet
 from pm3_dashboard.storage import BaseDatos, DatosNoValidos, ErrorBaseDatos
 from pm3_dashboard.storage import actividad, antenas, intercambio, tarjetas, volcados
 from pm3_dashboard.storage.actividad import TipoActividad
+from pm3_dashboard.storage.bd import fecha_texto
 from pm3_dashboard.storage.intercambio import ErrorImportacion
 from pm3_dashboard.storage.tarjetas import NuevaTarjeta
 from pm3_dashboard.pm3.modelos import Tecnologia
@@ -33,6 +34,10 @@ from pm3_dashboard.pm3.modelos import Tecnologia
 logger = logging.getLogger(__name__)
 
 EVENTOS_RECIENTES = 8
+MSG_LECTURA_NO_DISPONIBLE = (
+    "La lectura ya no está disponible (se ha guardado o se ha vuelto a escanear). "
+    "Escanea la tarjeta de nuevo."
+)
 MENSAJES_OCUPADA = (MSG_OCUPADA, MSG_EMULACION)
 TIMEOUT_CLONADO = 120.0
 TIMEOUT_TERMINAL = 30.0
@@ -142,6 +147,7 @@ class Api:
         self._mutex_lectura = threading.Lock()
         self._lectura: TarjetaLeida | None = None
         self._id_lectura = 0
+        self._volcado_lectura: Volcado | None = None  # bloques leídos del escaneo actual (sin guardar)
 
     # ================================================================ inicio
     def obtener_resumen(self) -> dict[str, Any]:
@@ -173,6 +179,14 @@ class Api:
         """Guarda la última lectura. La interfaz solo aporta el nombre y las notas."""
         return self._seguro(lambda: self._guardar_tarjeta(id_lectura, nombre, notas))
 
+    def leer_bloques_lectura(self, id_lectura: int) -> dict[str, Any]:
+        """Lee la memoria de la tarjeta recién escaneada (sin guardarla).
+
+        Classic usa autopwn (OPERACIÓN LARGA si no tiene claves de fábrica). El
+        volcado se asocia a la tarjeta si luego se guarda.
+        """
+        return self._seguro(lambda: self._leer_bloques_lectura(id_lectura))
+
     # ================================================================ base de datos
     def listar_tarjetas(self, texto: str = "", banda: str = "") -> dict[str, Any]:
         return self._seguro(lambda: self._listar(texto, banda))
@@ -197,12 +211,12 @@ class Api:
 
     # ================================================================ memoria HF (volcado y clonado)
     def leer_bloques(self, id_tarjeta: int) -> dict[str, Any]:
-        """Vuelca la memoria de una tarjeta HF guardada (claves por defecto) y lo guarda."""
-        return self._seguro(lambda: self._leer_bloques(id_tarjeta))
+        """Vuelca la memoria de una tarjeta HF guardada y lo guarda.
 
-    def recuperar_claves(self, id_tarjeta: int) -> dict[str, Any]:
-        """Recupera las claves con 'hf mf autopwn'. OPERACIÓN LARGA (varios minutos)."""
-        return self._seguro(lambda: self._recuperar_claves(id_tarjeta))
+        En MIFARE Classic usa 'hf mf autopwn' (OPERACIÓN LARGA si no tiene claves
+        de fábrica): prueba las claves por defecto y, si hacen falta, las recupera.
+        """
+        return self._seguro(lambda: self._leer_bloques(id_tarjeta))
 
     def obtener_volcado(self, id_tarjeta: int) -> dict[str, Any]:
         """Último volcado guardado de la tarjeta (sin leer la Proxmark)."""
@@ -263,6 +277,14 @@ class Api:
         """Ejecuta un comando del cliente. Solo los de lectura/diagnóstico corren directos;
         cualquier otro pide confirmación (comprobado aquí, no solo en la interfaz)."""
         return self._seguro(lambda: self._ejecutar_terminal(comando, confirmado))
+
+    def estado_consola(self) -> dict[str, Any]:
+        """Si se puede abrir el cliente en una consola nativa (hay cliente localizado y puerto)."""
+        return self._seguro(self._estado_consola)
+
+    def abrir_consola_pm3(self) -> dict[str, Any]:
+        """Abre el cliente de Iceman en una consola de PowerShell propia. No bloquea la app."""
+        return self._seguro(self._abrir_consola)
 
     # ================================================================ implementación
     def _seguro(self, operacion: Callable[[], dict[str, Any]]) -> dict[str, Any]:
@@ -355,6 +377,7 @@ class Api:
             self._id_lectura += 1
             id_lectura = self._id_lectura
             self._lectura = lectura
+            self._volcado_lectura = None  # un escaneo nuevo descarta el volcado anterior
 
         actividad.registrar(
             self._bd,
@@ -373,11 +396,7 @@ class Api:
         with self._mutex_lectura:
             lectura = self._lectura
             if lectura is None or id_lectura != self._id_lectura:
-                return {
-                    "ok": False,
-                    "error": "La lectura ya no está disponible (se ha guardado o se ha vuelto a escanear). "
-                    "Escanea la tarjeta de nuevo.",
-                }
+                return {"ok": False, "error": MSG_LECTURA_NO_DISPONIBLE}
             nueva = NuevaTarjeta(
                 nombre=nombre,
                 notas=notas,
@@ -390,7 +409,13 @@ class Api:
                 salida=lectura.salida,
             )
             id_tarjeta = tarjetas.insertar_tarjeta(self._bd, nueva)
+            volcado_pendiente = self._volcado_lectura
             self._lectura = None
+            self._volcado_lectura = None
+
+        # Si ya se habían leído los bloques de este escaneo, se asocian a la tarjeta.
+        if volcado_pendiente is not None:
+            volcados.guardar_volcado(self._bd, id_tarjeta, volcado_pendiente)
 
         actividad.registrar(
             self._bd,
@@ -398,6 +423,33 @@ class Api:
             f"Guardada «{nueva.nombre.strip()}» ({nueva.tipo}, {_etiqueta_uid(nueva.banda)} {lectura.uid})",
         )
         return {"ok": True, "id": id_tarjeta}
+
+    def _leer_bloques_lectura(self, id_lectura: object) -> dict[str, Any]:
+        id_lectura = _entero(id_lectura, "id_lectura")
+        # Se capturan tipo/UID bajo el cerrojo y se suelta: autopwn puede tardar
+        # minutos y no debe bloquear ni guardar ni un nuevo escaneo.
+        with self._mutex_lectura:
+            lectura = self._lectura
+            if lectura is None or id_lectura != self._id_lectura:
+                return {"ok": False, "error": MSG_LECTURA_NO_DISPONIBLE}
+        if lectura.banda == Banda.LF:
+            return {"ok": False, "error": "Solo se pueden leer los bloques de tarjetas HF."}
+
+        respuesta = self._proxmark.leer_bloques(lectura.tipo, lectura.uid)
+        if not respuesta.ok or respuesta.datos is None:
+            return {"ok": False, "error": respuesta.error or "No se pudo leer la memoria.", "salida": respuesta.salida}
+
+        datos = respuesta.datos
+        # Solo se asocia si no se ha vuelto a escanear mientras tanto.
+        with self._mutex_lectura:
+            if id_lectura == self._id_lectura:
+                self._volcado_lectura = datos
+        actividad.registrar(
+            self._bd,
+            TipoActividad.LECTURA,
+            f"Leídos {datos.bloques_leidos}/{datos.total_bloques} bloques ({_etiqueta_uid(lectura.banda)} {lectura.uid})",
+        )
+        return {"ok": True, "volcado": conversion.volcado_bruto(datos, fecha_texto())}
 
     # ---------------------------------------------------------------- base de datos
     def _listar(self, texto: object, banda: object) -> dict[str, Any]:
@@ -464,20 +516,6 @@ class Api:
                 self._bd,
                 TipoActividad.LECTURA,
                 f"Leídos {datos.bloques_leidos}/{datos.total_bloques} bloques de «{tarjeta.nombre}»",
-            )
-        return resultado
-
-    def _recuperar_claves(self, id_tarjeta: object) -> dict[str, Any]:
-        tarjeta = self._tarjeta_hf(id_tarjeta)
-        respuesta = self._proxmark.recuperar_claves(tarjeta.uid, tarjeta.tipo)
-        resultado = self._guardar_volcado(tarjeta, respuesta)
-        if resultado["ok"]:
-            datos = respuesta.datos
-            assert datos is not None
-            actividad.registrar(
-                self._bd,
-                TipoActividad.LECTURA,
-                f"Recuperadas claves de «{tarjeta.nombre}» ({datos.bloques_leidos}/{datos.total_bloques} bloques)",
             )
         return resultado
 
@@ -694,6 +732,22 @@ class Api:
             }
         res = self._proxmark.ejecutar(comando, timeout=TIMEOUT_TERMINAL)
         return {"ok": res.ok, "salida": res.salida, "error": res.error}
+
+    def _estado_consola(self) -> dict[str, Any]:
+        # El botón solo se muestra si hay cliente localizado Y puerto detectado.
+        cliente = conversion.cliente_iceman(self._proxmark.buscar_cliente())
+        if cliente is None:
+            return {"ok": True, "disponible": False, "mensaje": "No se ha localizado el cliente de Iceman."}
+        puerto = self._presencia()
+        if not puerto:
+            return {"ok": True, "disponible": False, "mensaje": "No se detecta ninguna Proxmark3 conectada por USB."}
+        return {"ok": True, "disponible": True, "cliente": cliente, "puerto": puerto}
+
+    def _abrir_consola(self) -> dict[str, Any]:
+        respuesta = self._proxmark.abrir_consola()
+        if not respuesta.ok or respuesta.datos is None:
+            return {"ok": False, "error": respuesta.error}
+        return {"ok": True, "puerto": respuesta.datos.puerto, "comando": respuesta.datos.comando}
 
     def _exportar(self) -> dict[str, Any]:
         ruta = self._dialogos.elegir_guardar(f"tarjetas_{self._hoy().isoformat()}.json")

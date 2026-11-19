@@ -15,6 +15,7 @@ from pm3_dashboard.pm3.modelos import (
     TarjetaLeida,
     Tecnologia,
     TipoTarjeta,
+    Volcado,
 )
 from pm3_dashboard.pm3.parsers import MINIMO_HF_V, MINIMO_LF_V
 from pm3_dashboard.pm3.recetas import derivados
@@ -172,10 +173,7 @@ def _sector_dict(sector: Any, tipo: TipoTarjeta, tecnologia: Tecnologia) -> dict
     return datos
 
 
-def volcado(guardado: VolcadoGuardado | None) -> dict[str, Any] | None:
-    if guardado is None:
-        return None
-    v = guardado.volcado
+def _volcado_a_dict(v: Volcado, id_volcado: int | None, fecha: str) -> dict[str, Any]:
     paginas = [b.datos for sector in v.sectores for b in sector.bloques]
     ndef = (
         [asdict(r) for r in decodificadores.decodificar_ndef(paginas)]
@@ -183,8 +181,8 @@ def volcado(guardado: VolcadoGuardado | None) -> dict[str, Any] | None:
         else []
     )
     return {
-        "id": guardado.id,
-        "fecha": guardado.fecha,
+        "id": id_volcado,
+        "fecha": fecha,
         "tecnologia": v.tecnologia.value,
         "tipo": v.tipo.value,
         "uid": v.uid,
@@ -195,3 +193,15 @@ def volcado(guardado: VolcadoGuardado | None) -> dict[str, Any] | None:
         "sectores": [_sector_dict(s, v.tipo, v.tecnologia) for s in v.sectores],
         "ndef": ndef,
     }
+
+
+def volcado(guardado: VolcadoGuardado | None) -> dict[str, Any] | None:
+    """Volcado guardado en la base de datos."""
+    if guardado is None:
+        return None
+    return _volcado_a_dict(guardado.volcado, guardado.id, guardado.fecha)
+
+
+def volcado_bruto(v: Volcado, fecha: str) -> dict[str, Any]:
+    """Volcado aún no guardado (lectura sobre una tarjeta recién escaneada)."""
+    return _volcado_a_dict(v, None, fecha)

@@ -125,8 +125,7 @@ async function verTarjeta(id) {
 let volcadoMemoria = null;  // último volcado mostrado (para el editor de bloques)
 
 function engancharMemoria(cuerpo, tarjeta) {
-    cuerpo.querySelector('[data-mem="leer"]')?.addEventListener('click', () => accionMemoria(cuerpo, tarjeta, 'leer'));
-    cuerpo.querySelector('[data-mem="recuperar"]')?.addEventListener('click', () => accionMemoria(cuerpo, tarjeta, 'recuperar'));
+    cuerpo.querySelector('[data-mem="leer"]')?.addEventListener('click', () => leerBloques(cuerpo, tarjeta));
     cuerpo.querySelector('[data-mem="clonar"]')?.addEventListener('click', () => clonar(cuerpo, tarjeta));
     cuerpo.querySelector('[data-mem="laboratorio"]')?.addEventListener('change', (ev) => {
         modoLaboratorio = ev.target.checked;
@@ -148,6 +147,14 @@ function estadoMemoria(cuerpo, texto, tipo) {
     caja.className = `rounded-lg p-2 text-xs ${CLASES_MENSAJE[tipo]}`;
     caja.textContent = texto;
     caja.classList.toggle('hidden', !texto);
+}
+
+/** Fallo en la ficha: muestra el mensaje y la salida completa del cliente (escapada). */
+function estadoMemoriaFallo(cuerpo, r) {
+    const caja = cuerpo.querySelector('[data-mem="estado"]');
+    caja.className = `rounded-lg p-2 text-xs ${CLASES_MENSAJE.error}`;
+    caja.innerHTML = htmlFalloConSalida(r);
+    caja.classList.remove('hidden');
 }
 
 function repintarMemoria(cuerpo, tarjeta, volcado) {
@@ -239,7 +246,7 @@ function editarBloque(cuerpo, tarjeta, indice) {
             if (r.requiere_confirmacion) {
                 confirmarEscritura(cuerpo, tarjeta, indice, datos(), params, r, edEstado);
             } else if (!r.ok) {
-                edEstado(escaparHtml(r.error), 'error');
+                edEstado(htmlFalloConSalida(r), 'error');
             }
         } catch (error) {
             edEstado(`Error: ${escaparHtml(textoError(error))}`, 'error');
@@ -273,7 +280,7 @@ function confirmarEscritura(cuerpo, tarjeta, indice, datosOriginales, params, pr
                 cuerpo.querySelector('[data-conf="releer"]').addEventListener('click', () => releerBloque(cuerpo, tarjeta, indice, params, edEstado));
                 cargarResumen();
             } else {
-                edEstado(escaparHtml(r.error), 'error');
+                edEstado(htmlFalloConSalida(r), 'error');
             }
         } catch (error) {
             edEstado(`Error: ${escaparHtml(textoError(error))}`, 'error');
@@ -292,17 +299,18 @@ async function releerBloque(cuerpo, tarjeta, indice, params, edEstado) {
     }
 }
 
-async function accionMemoria(cuerpo, tarjeta, accion) {
-    const esRecuperar = accion === 'recuperar';
-    const botones = cuerpo.querySelectorAll('[data-mem="leer"], [data-mem="recuperar"], [data-mem="clonar"]');
+async function leerBloques(cuerpo, tarjeta) {
+    const botones = cuerpo.querySelectorAll('[data-mem="leer"], [data-mem="clonar"]');
     botones.forEach((b) => (b.disabled = true));
-    estadoMemoria(cuerpo, esRecuperar
-        ? 'Recuperando claves… Puede tardar varios minutos. No cierres la aplicación.'
+    // MIFARE Classic usa autopwn: rápido con claves de fábrica, varios minutos si no.
+    const esClassic = tarjeta.banda === 'hf' && String(tarjeta.tipo).startsWith('MIFARE Classic');
+    estadoMemoria(cuerpo, esClassic
+        ? 'Leyendo la tarjeta… Si no tiene claves de fábrica, puede tardar varios minutos. No cierres la aplicación.'
         : 'Leyendo la memoria de la tarjeta…', 'aviso');
     try {
-        const r = esRecuperar ? await api().recuperar_claves(tarjeta.id) : await api().leer_bloques(tarjeta.id);
+        const r = await api().leer_bloques(tarjeta.id);
         if (!r.ok) {
-            estadoMemoria(cuerpo, r.error, 'error');
+            estadoMemoriaFallo(cuerpo, r);  // muestra también la salida del cliente (la causa real)
             botones.forEach((b) => (b.disabled = false));
             return;
         }
@@ -318,7 +326,7 @@ async function accionMemoria(cuerpo, tarjeta, accion) {
 }
 
 function deshabilitarBotonesMemoria(cuerpo, deshabilitar) {
-    cuerpo.querySelectorAll('[data-mem="leer"], [data-mem="recuperar"], [data-mem="clonar"]')
+    cuerpo.querySelectorAll('[data-mem="leer"], [data-mem="clonar"]')
         .forEach((b) => (b.disabled = deshabilitar));
 }
 
@@ -347,9 +355,11 @@ async function ejecutarClonado(cuerpo, tarjeta) {
     estadoMemoria(cuerpo, 'Escribiendo en la tarjeta mágica…', 'aviso');
     try {
         const r = await api().clonar_tarjeta(tarjeta.id);
-        estadoMemoria(cuerpo, r.ok ? 'Tarjeta clonada correctamente.' : r.error, r.ok ? 'ok' : 'error');
         if (r.ok) {
+            estadoMemoria(cuerpo, 'Tarjeta clonada correctamente.', 'ok');
             cargarResumen();
+        } else {
+            estadoMemoriaFallo(cuerpo, r);  // incluye la salida del cliente
         }
     } catch (error) {
         estadoMemoria(cuerpo, `Error al clonar: ${textoError(error)}`, 'error');

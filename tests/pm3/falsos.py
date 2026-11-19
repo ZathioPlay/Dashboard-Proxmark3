@@ -97,7 +97,9 @@ class LanzadorFalso:
     def __init__(self) -> None:
         self.respuestas: dict[str, SalidaProceso | BaseException] = {}
         self.llamadas: list[list[str]] = []
+        self.timeouts: list[float] = []
         self.procesos: list[ProcesoFalso] = []
+        self.consolas: list[dict] = []
         self.lineas_emulacion: list[str] = ["[=] Press pm3 button to abort simulation\n"]
         self.ignora_terminate = False
         self.error_al_abrir: OSError | None = None
@@ -120,6 +122,7 @@ class LanzadorFalso:
         self, argv: Sequence[str], *, timeout: float, env: Mapping[str, str], cwd: Path
     ) -> SalidaProceso:
         self.llamadas.append(list(argv))
+        self.timeouts.append(timeout)
         self.dentro.set()
         if self.bloqueo is not None:
             self.bloqueo.wait(5)
@@ -135,3 +138,7 @@ class LanzadorFalso:
         proceso = ProcesoFalso(self.lineas_emulacion, ignora_terminate=self.ignora_terminate)
         self.procesos.append(proceso)
         return proceso
+
+    def lanzar_consola(self, argv: Sequence[str], *, env: Mapping[str, str], cwd: Path) -> None:
+        # No abre nada: solo registra el comando y el entorno para los tests.
+        self.consolas.append({"argv": list(argv), "env": dict(env), "cwd": cwd})

@@ -41,7 +41,47 @@ function pintarLectura(tarjeta) {
     $('btn-guardar').disabled = false;
     mostrarMensaje('guardar-mensaje', '');
     mostrar('lectura-resultado', true);
+
+    // Leer bloques solo tiene sentido en HF; se parte de cero en cada escaneo.
+    $('lectura-bloques-tabla').innerHTML = '';
+    mostrar('lectura-bloques-estado', false);
+    $('btn-leer-lectura').disabled = false;
+    mostrar('lectura-bloques', tarjeta.banda === 'hf');
+
     $('guardar-nombre').focus();
+}
+
+async function leerBloquesLectura() {
+    if (!lecturaActual) {
+        return;
+    }
+    const boton = $('btn-leer-lectura');
+    boton.disabled = true;
+    const estado = (texto, tipo) => {
+        const caja = $('lectura-bloques-estado');
+        caja.className = `rounded-lg p-2 text-xs ${CLASES_MENSAJE[tipo]}`;
+        caja.innerHTML = texto;
+        caja.classList.remove('hidden');
+    };
+    const esClassic = String(lecturaActual.tipo).startsWith('MIFARE Classic');
+    estado(esClassic
+        ? 'Leyendo la tarjeta… Si no tiene claves de fábrica, puede tardar varios minutos. No cierres la aplicación.'
+        : 'Leyendo la memoria de la tarjeta…', 'aviso');
+    try {
+        const r = await api().leer_bloques_lectura(lecturaActual.id_lectura);
+        if (!r.ok) {
+            estado(htmlFalloConSalida(r), 'error');  // incluye la salida del cliente
+            boton.disabled = false;
+            return;
+        }
+        mostrar('lectura-bloques-estado', false);
+        // Misma vista de bloques que la ficha (hex, ASCII, claves y accesos), de solo lectura.
+        $('lectura-bloques-tabla').innerHTML = htmlTablaVolcado(r.volcado, false);
+        cargarResumen();
+    } catch (error) {
+        estado(`Error: ${escaparHtml(textoError(error))}`, 'error');
+        boton.disabled = false;
+    }
 }
 
 async function guardarLectura(evento) {
@@ -74,4 +114,5 @@ async function guardarLectura(evento) {
 function iniciarSeccionLectura() {
     $('btn-escanear').addEventListener('click', escanear);
     $('form-guardar').addEventListener('submit', guardarLectura);
+    $('btn-leer-lectura').addEventListener('click', leerBloquesLectura);
 }

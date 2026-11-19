@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from datetime import date
 
-from pm3_dashboard.pm3.cliente import ClientePm3
+from pm3_dashboard.pm3.cliente import ClientePm3, ConsolaPm3, ErrorPm3
 from pm3_dashboard.pm3.emulacion import GestorEmulacion
 from pm3_dashboard.pm3.localizador import ResultadoBusqueda
 from pm3_dashboard.pm3.modelos import (
@@ -29,6 +29,7 @@ from pm3_dashboard.pm3.parsers import (
 )
 from pm3_dashboard.pm3 import recetas
 from pm3_dashboard.pm3.recetas import receta_hf, receta_lf
+from pm3_dashboard.pm3.salida import diagnostico_fallo
 
 BANDAS = ("auto", "hf", "lf")
 MSG_SIN_TARJETA = "No se detectó ninguna tarjeta sobre la antena de Proxmark3."
@@ -39,10 +40,14 @@ TIMEOUT_ESCRITURA = 20.0
 # autopwn prueba miles de claves; en el peor caso tarda varios minutos.
 TIMEOUT_AUTOPWN = 600.0
 
+# Para MIFARE Classic se usa autopwn (no 'hf mf dump'): dump necesita un fichero
+# de claves previo (hf-mf-UID-key.bin) y falla si no se ha recuperado antes.
+# autopwn prueba primero las claves por defecto (rápido) y, si hacen falta, las
+# recupera; en ambos casos deja el volcado. Ultralight no usa claves.
 _COMANDO_DUMP = {
-    TipoTarjeta.MIFARE_CLASSIC_1K: "hf mf dump",
-    TipoTarjeta.MIFARE_CLASSIC_4K: "hf mf dump",
-    TipoTarjeta.ULTRALIGHT_NTAG: "hf mfu dump",
+    TipoTarjeta.MIFARE_CLASSIC_1K: ("hf mf autopwn", TIMEOUT_AUTOPWN),
+    TipoTarjeta.MIFARE_CLASSIC_4K: ("hf mf autopwn", TIMEOUT_AUTOPWN),
+    TipoTarjeta.ULTRALIGHT_NTAG: ("hf mfu dump", TIMEOUT_VOLCADO),
 }
 
 
@@ -66,6 +71,14 @@ class Proxmark3:
     def buscar_cliente(self) -> ResultadoBusqueda:
         """Qué cliente de Iceman se usa y de dónde sale (no ejecuta nada)."""
         return self.cliente.buscar_cliente()
+
+    def abrir_consola(self) -> Respuesta[ConsolaPm3]:
+        """Abre el cliente de Iceman en una consola de PowerShell propia."""
+        try:
+            consola = self.cliente.abrir_consola()
+        except ErrorPm3 as exc:
+            return Respuesta(ok=False, error=str(exc))
+        return Respuesta(ok=True, datos=consola, puerto=consola.puerto)
 
     def puerto_presente(self) -> str | None:
         """Comprobación ligera de conexión (no lanza 'hw version')."""
@@ -117,24 +130,24 @@ class Proxmark3:
         return Respuesta(ok=False, error=MSG_SIN_TARJETA)
 
     def leer_bloques(self, tipo: str, uid: str) -> Respuesta[Volcado]:
-        """Vuelca la memoria de una tarjeta HF con las claves por defecto (no intenta autopwn)."""
-        tipo_tarjeta = TipoTarjeta(tipo)
-        comando = _COMANDO_DUMP.get(tipo_tarjeta)
-        if comando is None:
-            return Respuesta(ok=False, error=MSG_SOLO_HF)
-        res = self.cliente.ejecutar(comando, timeout=TIMEOUT_VOLCADO)
-        if not res.ok:
-            return Respuesta(ok=False, error=res.error, salida=res.salida, puerto=res.puerto)
-        return Respuesta(ok=True, datos=parsear_volcado(res.salida, tipo_tarjeta), salida=res.salida, puerto=res.puerto)
+        """Vuelca la memoria de una tarjeta HF.
 
-    def recuperar_claves(self, uid: str, tipo: str = TipoTarjeta.MIFARE_CLASSIC_1K) -> Respuesta[Volcado]:
-        """Recupera las claves de una MIFARE Classic con 'hf mf autopwn'. Operación larga."""
+        MIFARE Classic usa 'hf mf autopwn' (claves por defecto y, si hacen falta,
+        recuperación): una sola acción lee la tarjeta tenga o no claves de fábrica.
+        Ultralight/NTAG usa 'hf mfu dump'. Si autopwn recupera solo parte de las
+        claves, el volcado queda con faltan_claves=True.
+        """
         tipo_tarjeta = TipoTarjeta(tipo)
-        if tipo_tarjeta not in (TipoTarjeta.MIFARE_CLASSIC_1K, TipoTarjeta.MIFARE_CLASSIC_4K):
-            return Respuesta(ok=False, error="La recuperación de claves solo se aplica a MIFARE Classic.")
-        res = self.cliente.ejecutar("hf mf autopwn", timeout=TIMEOUT_AUTOPWN)
+        comando_timeout = _COMANDO_DUMP.get(tipo_tarjeta)
+        if comando_timeout is None:
+            return Respuesta(ok=False, error=MSG_SOLO_HF)
+        comando, timeout = comando_timeout
+        res = self.cliente.ejecutar(comando, timeout=timeout)
         if not res.ok:
-            return Respuesta(ok=False, error=res.error, salida=res.salida, puerto=res.puerto)
+            # La salida completa se muestra siempre; aquí solo se mejora el titular.
+            return Respuesta(
+                ok=False, error=diagnostico_fallo(res.salida) or res.error, salida=res.salida, puerto=res.puerto
+            )
         return Respuesta(ok=True, datos=parsear_volcado(res.salida, tipo_tarjeta), salida=res.salida, puerto=res.puerto)
 
     def escribir_bloque(

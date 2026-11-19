@@ -311,6 +311,7 @@ def test_solo_se_exponen_los_metodos_previstos(entorno: Entorno) -> None:
         "medir_antenas",
         "escanear",
         "guardar_tarjeta",
+        "leer_bloques_lectura",
         "listar_tarjetas",
         "obtener_tarjeta",
         "editar_tarjeta",
@@ -318,7 +319,6 @@ def test_solo_se_exponen_los_metodos_previstos(entorno: Entorno) -> None:
         "exportar_tarjetas",
         "importar_tarjetas",
         "leer_bloques",
-        "recuperar_claves",
         "obtener_volcado",
         "clonar_tarjeta",
         "listar_mediciones",
@@ -326,6 +326,8 @@ def test_solo_se_exponen_los_metodos_previstos(entorno: Entorno) -> None:
         "detener_emulacion",
         "estado_emulacion",
         "ejecutar_terminal",
+        "estado_consola",
+        "abrir_consola_pm3",
         "preparar_datos_bloque",
         "escribir_bloque",
         "leer_bloque",
@@ -624,7 +626,7 @@ def _muestra(nombre: str) -> str:
 
 def test_leer_bloques_guarda_el_volcado_y_registra(entorno: Entorno) -> None:
     id_tarjeta = _tarjeta_hf(entorno)
-    entorno.lanzador.responder("hf mf dump", stdout=_muestra("hf_mf_dump_1k_completo"))
+    entorno.lanzador.responder("hf mf autopwn", stdout=_muestra("hf_mf_dump_1k_completo"))
 
     resultado = entorno.api.leer_bloques(id_tarjeta)
 
@@ -640,7 +642,7 @@ def test_leer_bloques_guarda_el_volcado_y_registra(entorno: Entorno) -> None:
 
 def test_leer_bloques_con_sectores_sin_clave(entorno: Entorno) -> None:
     id_tarjeta = _tarjeta_hf(entorno)
-    entorno.lanzador.responder("hf mf dump", stdout=_muestra("hf_mf_dump_1k_faltan_claves"))
+    entorno.lanzador.responder("hf mf autopwn", stdout=_muestra("hf_mf_dump_1k_faltan_claves"))
 
     resultado = entorno.api.leer_bloques(id_tarjeta)
 
@@ -651,7 +653,7 @@ def test_leer_bloques_con_sectores_sin_clave(entorno: Entorno) -> None:
 
 def test_leer_bloques_avisa_si_el_uid_no_coincide(entorno: Entorno) -> None:
     id_tarjeta = _tarjeta_hf(entorno, uid="99999999")  # distinto del de la muestra (5A3E7C1B)
-    entorno.lanzador.responder("hf mf dump", stdout=_muestra("hf_mf_dump_1k_completo"))
+    entorno.lanzador.responder("hf mf autopwn", stdout=_muestra("hf_mf_dump_1k_completo"))
 
     resultado = entorno.api.leer_bloques(id_tarjeta)
 
@@ -673,18 +675,6 @@ def test_leer_bloques_tarjeta_inexistente(entorno: Entorno) -> None:
     assert not entorno.api.leer_bloques(9999)["ok"]
 
 
-def test_recuperar_claves(entorno: Entorno) -> None:
-    id_tarjeta = _tarjeta_hf(entorno)
-    entorno.lanzador.responder("hf mf autopwn", stdout=_muestra("hf_mf_autopwn"))
-
-    resultado = entorno.api.recuperar_claves(id_tarjeta)
-
-    assert resultado["ok"]
-    assert resultado["volcado"]["faltan_claves"] is False
-    assert entorno.lanzador.comandos == ["hf mf autopwn"]
-    assert "Recuperadas claves de «Oficina»" in entorno.descripciones()[0]
-
-
 def test_obtener_volcado_sin_ninguno(entorno: Entorno) -> None:
     id_tarjeta = _tarjeta_hf(entorno)
 
@@ -694,7 +684,7 @@ def test_obtener_volcado_sin_ninguno(entorno: Entorno) -> None:
 def test_clonar_usa_el_volcado_y_el_comando_de_recetas(entorno: Entorno, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("APPDATA", str(tmp_path))  # carpeta dumps dentro de tmp
     id_tarjeta = _tarjeta_hf(entorno)
-    entorno.lanzador.responder("hf mf dump", stdout=_muestra("hf_mf_dump_1k_completo"))
+    entorno.lanzador.responder("hf mf autopwn", stdout=_muestra("hf_mf_dump_1k_completo"))
     entorno.api.leer_bloques(id_tarjeta)
     entorno.lanzador.responder("hf mf cload -f dump_5A3E7C1B.bin", stdout="[+] Wrote block 0")
 
@@ -722,7 +712,7 @@ def test_no_se_clona_sin_volcado(entorno: Entorno) -> None:
 
 def test_no_se_clona_un_volcado_incompleto(entorno: Entorno) -> None:
     id_tarjeta = _tarjeta_hf(entorno)
-    entorno.lanzador.responder("hf mf dump", stdout=_muestra("hf_mf_dump_1k_faltan_claves"))
+    entorno.lanzador.responder("hf mf autopwn", stdout=_muestra("hf_mf_dump_1k_faltan_claves"))
     entorno.api.leer_bloques(id_tarjeta)
 
     resultado = entorno.api.clonar_tarjeta(id_tarjeta)
@@ -746,7 +736,7 @@ def test_no_se_clona_ultralight_todavia(entorno: Entorno) -> None:
 def test_un_uid_manipulado_no_escribe_fuera_de_dumps(entorno: Entorno, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("APPDATA", str(tmp_path))
     id_tarjeta = _tarjeta_hf(entorno)
-    entorno.lanzador.responder("hf mf dump", stdout=_muestra("hf_mf_dump_1k_completo"))
+    entorno.lanzador.responder("hf mf autopwn", stdout=_muestra("hf_mf_dump_1k_completo"))
     entorno.api.leer_bloques(id_tarjeta)
     # Alguien edita la BD a mano con un UID que intenta salirse de la carpeta.
     with entorno.bd.conexion() as con:
@@ -1050,7 +1040,7 @@ def test_leer_bloque_para_verificar(entorno: Entorno) -> None:
 
 def test_volcado_enriquecido_tiene_ascii_claves_y_accesos(entorno: Entorno) -> None:
     id_tarjeta = _tarjeta_hf(entorno)
-    entorno.lanzador.responder("hf mf dump", stdout=_muestra("hf_mf_dump_1k_completo"))
+    entorno.lanzador.responder("hf mf autopwn", stdout=_muestra("hf_mf_dump_1k_completo"))
     entorno.api.leer_bloques(id_tarjeta)
 
     volcado = entorno.api.obtener_volcado(id_tarjeta)["volcado"]
@@ -1070,3 +1060,123 @@ def test_volcado_ultralight_lleva_ndef(entorno: Entorno) -> None:
     volcado = entorno.api.obtener_volcado(id_tarjeta)["volcado"]
 
     assert volcado["ndef"] == [{"tipo": "uri", "contenido": "https://example.com"}]
+
+
+# ================================================================ leer bloques en la sección Lectura
+
+def test_leer_bloques_lectura_sin_guardar(entorno: Entorno) -> None:
+    lectura = _escanear_1k(entorno)["tarjeta"]
+    entorno.lanzador.responder("hf mf autopwn", stdout=_muestra("hf_mf_dump_1k_completo"))
+
+    r = entorno.api.leer_bloques_lectura(lectura["id_lectura"])
+
+    assert r["ok"]
+    assert r["volcado"]["bloques_leidos"] == 64
+    assert r["volcado"]["id"] is None  # aún no está en la base de datos
+    assert "hf mf autopwn" in entorno.lanzador.comandos
+    # No se ha guardado ninguna tarjeta ni volcado todavía.
+    assert entorno.api.obtener_resumen()["tarjetas"]["total"] == 0
+
+
+def test_al_guardar_se_asocia_el_volcado_leido(entorno: Entorno) -> None:
+    lectura = _escanear_1k(entorno)["tarjeta"]
+    entorno.lanzador.responder("hf mf autopwn", stdout=_muestra("hf_mf_dump_1k_completo"))
+    entorno.api.leer_bloques_lectura(lectura["id_lectura"])
+
+    guardada = entorno.api.guardar_tarjeta(lectura["id_lectura"], "Oficina", "")
+    volcado = entorno.api.obtener_volcado(guardada["id"])["volcado"]
+
+    assert volcado is not None
+    assert volcado["bloques_leidos"] == 64
+    assert volcado["id"] is not None  # ahora sí guardado
+
+
+def test_guardar_sin_leer_bloques_no_crea_volcado(entorno: Entorno) -> None:
+    lectura = _escanear_1k(entorno)["tarjeta"]
+
+    guardada = entorno.api.guardar_tarjeta(lectura["id_lectura"], "Oficina", "")
+
+    assert entorno.api.obtener_volcado(guardada["id"])["volcado"] is None
+
+
+def test_reescanear_descarta_el_volcado_anterior(entorno: Entorno) -> None:
+    primera = _escanear_1k(entorno)["tarjeta"]
+    entorno.lanzador.responder("hf mf autopwn", stdout=_muestra("hf_mf_dump_1k_completo"))
+    entorno.api.leer_bloques_lectura(primera["id_lectura"])
+    # Se vuelve a escanear: el volcado anterior se descarta.
+    segunda = _escanear_1k(entorno)["tarjeta"]
+
+    guardada = entorno.api.guardar_tarjeta(segunda["id_lectura"], "Otra", "")
+
+    assert entorno.api.obtener_volcado(guardada["id"])["volcado"] is None
+
+
+def test_leer_bloques_lectura_sin_escaneo(entorno: Entorno) -> None:
+    assert not entorno.api.leer_bloques_lectura(1)["ok"]
+
+
+def test_leer_bloques_lectura_lf_se_rechaza(entorno: Entorno) -> None:
+    entorno.lanzador.responder("hf search", stdout=_muestra("hf_search_vacio"))
+    entorno.lanzador.responder("lf search", stdout=_muestra("lf_search_em410x"))
+    lectura = entorno.api.escanear("auto")["tarjeta"]
+
+    r = entorno.api.leer_bloques_lectura(lectura["id_lectura"])
+
+    assert not r["ok"]
+    assert "HF" in r["error"]
+
+
+# ================================================================ abrir pm3 en una consola
+
+def test_estado_consola_disponible(entorno: Entorno) -> None:
+    r = entorno.api.estado_consola()
+
+    assert r["ok"] and r["disponible"] is True
+    assert r["puerto"] == "COM5"
+    assert r["cliente"]["ruta"] == str(entorno.ejecutable)
+
+
+def test_estado_consola_sin_puerto(entorno: Entorno) -> None:
+    entorno.conectada = False
+
+    r = entorno.api.estado_consola()
+
+    assert r["ok"] and r["disponible"] is False
+    assert "No se detecta ninguna Proxmark3" in r["mensaje"]
+
+
+def test_estado_consola_sin_cliente(tmp_path: Path) -> None:
+    from pm3_dashboard.pm3.localizador import ResultadoBusqueda
+    cliente = ClientePm3(
+        cargar=lambda: ConfigPm3(puerto="COM5"),
+        lanzador=LanzadorFalso(),
+        localizar=lambda _: ResultadoBusqueda(None, ("x",)),
+        carpeta_trabajo=tmp_path / "dumps",
+    )
+    api = Api(proxmark=Proxmark3(cliente=cliente), bd=BaseDatos(tmp_path / "pm3.db"))
+
+    r = api.estado_consola()
+
+    assert r["disponible"] is False
+    assert "No se ha localizado el cliente" in r["mensaje"]
+
+
+def test_abrir_consola_lanza_la_consola(entorno: Entorno) -> None:
+    r = entorno.api.abrir_consola_pm3()
+
+    assert r["ok"]
+    assert r["puerto"] == "COM5"
+    assert "proxmark3.exe -p COM5" in r["comando"]
+    assert len(entorno.lanzador.consolas) == 1
+    assert entorno.lanzador.consolas[0]["argv"][0] == "powershell"
+    assert entorno.lanzador.llamadas == []  # no ejecuta ningún comando
+
+
+def test_abrir_consola_sin_proxmark(entorno: Entorno) -> None:
+    entorno.conectada = False
+
+    r = entorno.api.abrir_consola_pm3()
+
+    assert not r["ok"]
+    assert "No se detecta ninguna Proxmark3" in r["error"]
+    assert entorno.lanzador.consolas == []

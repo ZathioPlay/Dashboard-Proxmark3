@@ -10,8 +10,7 @@ const AVISO_USO = 'Vuelca memoria, clona y escribe solo en tarjetas propias o co
 
 // ==================== TABLA HEX + ASCII ====================
 
-function htmlFilaBloque(bloque, tecnologia) {
-    const editable = modoLaboratorio && bloque.leido;
+function htmlFilaBloque(bloque, editable) {
     if (!bloque.leido) {
         return `
             <tr>
@@ -24,9 +23,9 @@ function htmlFilaBloque(bloque, tecnologia) {
             <td class="px-2 py-1 text-right font-mono text-[11px] text-slate-500">${Number(bloque.indice)}</td>
             <td class="px-2 py-1 font-mono text-[11px] break-all text-slate-200">${escaparHtml(bloque.datos)}</td>
             <td class="px-2 py-1 font-mono text-[11px] text-slate-400 whitespace-pre">${escaparHtml(bloque.ascii)}</td>
-            <td class="px-1 py-1 text-right">${editable
-                ? `<button data-editar="${Number(bloque.indice)}" class="px-1.5 py-0.5 rounded bg-cyber-800 hover:bg-slate-700 text-[10px] text-cyan-300">Editar</button>`
-                : ''}</td>
+            ${editable
+                ? `<td class="px-1 py-1 text-right"><button data-editar="${Number(bloque.indice)}" class="px-1.5 py-0.5 rounded bg-cyber-800 hover:bg-slate-700 text-[10px] text-cyan-300">Editar</button></td>`
+                : ''}
         </tr>`;
 }
 
@@ -49,7 +48,7 @@ function htmlClavesYAccesos(sector) {
     return html;
 }
 
-function htmlSector(sector, tecnologia) {
+function htmlSector(sector, tecnologia, editable) {
     const classic = tecnologia === 'mifare_classic';
     const cabecera = classic
         ? `<div class="flex items-center justify-between px-2 py-1 bg-cyber-950 border-b border-slate-800">
@@ -59,7 +58,7 @@ function htmlSector(sector, tecnologia) {
                    : '<span class="text-[10px] font-mono text-amber-300">falta clave</span>'}
            </div>`
         : '';
-    const filas = sector.bloques.map((b) => htmlFilaBloque(b, tecnologia)).join('');
+    const filas = sector.bloques.map((b) => htmlFilaBloque(b, editable && b.leido)).join('');
     return `
         <div class="border border-slate-800 rounded-lg overflow-hidden ${classic && !sector.completo ? 'ring-1 ring-amber-500/30' : ''}">
             ${cabecera}
@@ -82,12 +81,12 @@ function htmlNdef(volcado) {
         </div>`;
 }
 
-function htmlTablaVolcado(volcado) {
+function htmlTablaVolcado(volcado, editable = modoLaboratorio) {
     const columnas = volcado.tecnologia === 'mifare_classic' ? 'md:grid-cols-2' : 'md:grid-cols-4';
     return `
         ${htmlNdef(volcado)}
         <div class="grid grid-cols-1 ${columnas} gap-2">
-            ${volcado.sectores.map((s) => htmlSector(s, volcado.tecnologia)).join('')}
+            ${volcado.sectores.map((s) => htmlSector(s, volcado.tecnologia, editable)).join('')}
         </div>`;
 }
 
@@ -109,10 +108,7 @@ function htmlPanelMemoria(tarjeta, volcado) {
             <div class="flex items-center justify-between gap-2">
                 <h4 class="text-sm font-bold text-white">Memoria de la tarjeta</h4>
                 <div class="flex items-center gap-2">
-                    <button data-mem="leer" class="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-700 disabled:text-slate-400 text-white text-xs font-semibold rounded-lg transition">Leer bloques</button>
-                    ${volcado && volcado.faltan_claves
-                        ? '<button data-mem="recuperar" class="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 disabled:bg-slate-700 disabled:text-slate-400 text-white text-xs font-semibold rounded-lg transition">Recuperar claves</button>'
-                        : ''}
+                    <button data-mem="leer" title="MIFARE Classic: prueba las claves por defecto y, si hacen falta, las recupera (autopwn). Guarda el volcado." class="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-700 disabled:text-slate-400 text-white text-xs font-semibold rounded-lg transition">Leer bloques</button>
                     <button data-mem="clonar" class="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 disabled:bg-slate-700 disabled:text-slate-400 text-white text-xs font-semibold rounded-lg transition" ${puedeClonar ? '' : 'disabled title="Hace falta un volcado completo"'}>Clonar a tarjeta mágica</button>
                 </div>
             </div>
